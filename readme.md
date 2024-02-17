@@ -2,17 +2,14 @@
 
 Demo of a AWS API Gateway usage with a REST endpoint and a websocket connection
 
-## How to use
 
-```sh
-sam build
+* Weather API deployed to AWS [weather_api](weather_api/readme.md)
+* Data sample creator: [populate_samples](populate_samples/readme.md)
 
-# only the first time, then choose to same settings to file
-sam deploy --guided
+### Data Samples
 
-# all subsequent deployments
-sam deploy
-```
+
+
 
 ## Status
 

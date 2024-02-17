@@ -2,4 +2,5 @@
 samconfig.toml
 
 # compilation result
-populate/weather_demo_populate
+populate_samples/weather_demo_populate
+
