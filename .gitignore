@@ -1,2 +1,5 @@
 .aws-sam/
 samconfig.toml
+
+# compilation result
+populate/weather_demo_populate
