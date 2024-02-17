@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -16,7 +17,7 @@ import (
 
 type WeatherEvent struct {
 	DeviceId  int64
-	Time      int64
+	Time      time.Time
 	EventType string
 	Value     float64
 }
@@ -33,7 +34,7 @@ func logAny(v any) {
 func addSample(ctx context.Context, client *dynamodb.Client, event WeatherEvent, iteration int) error {
 
 	// mutating this copy of event to create some variation in the data
-	event.Time = event.Time + int64(iteration*10)
+	event.Time = time.Unix(event.Time.Unix()+int64(iteration*10), 0)
 	event.Value = event.Value + float64(iteration)
 	logAny(event)
 
@@ -47,7 +48,7 @@ func addSample(ctx context.Context, client *dynamodb.Client, event WeatherEvent,
 		},
 		"SK": &types.AttributeValueMemberS{
 			// considering there can be maximum one event of any type for a given device at any timestamp
-			Value: fmt.Sprintf("Time#%d#Type%s", event.Time, event.EventType),
+			Value: fmt.Sprintf("Time#%d#Type%s", event.Time.Unix(), event.EventType),
 		},
 		"DeviceId": &types.AttributeValueMemberN{
 			Value: fmt.Sprintf("%d", event.DeviceId),
@@ -77,7 +78,7 @@ func addSample(ctx context.Context, client *dynamodb.Client, event WeatherEvent,
 	return nil
 }
 
-func main() {
+func mainn() {
 	log.Println("Populating DynamoDB with dummy weather data")
 	ctx := context.Background()
 
@@ -88,17 +89,17 @@ func main() {
 	dynamoClient := dynamodb.NewFromConfig(sdk_config)
 
 	some_events := []WeatherEvent{
-		{DeviceId: 123, Time: 1708176000, EventType: "Pressure", Value: 1037},
-		{DeviceId: 123, Time: 1708176000, EventType: "Temperature", Value: 20.5},
-		{DeviceId: 123, Time: 1708176000, EventType: "Humidity", Value: 0.5},
-		{DeviceId: 123, Time: 1708176000, EventType: "WindSpeed", Value: 5.5},
-		{DeviceId: 123, Time: 1708176000, EventType: "WindDirection", Value: 180},
+		{DeviceId: 123, Time: time.Unix(1708176000, 0), EventType: "Pressure", Value: 1037},
+		{DeviceId: 123, Time: time.Unix(1708176000, 0), EventType: "Temperature", Value: 20.5},
+		{DeviceId: 123, Time: time.Unix(1708176000, 0), EventType: "Humidity", Value: 0.5},
+		{DeviceId: 123, Time: time.Unix(1708176000, 0), EventType: "WindSpeed", Value: 5.5},
+		{DeviceId: 123, Time: time.Unix(1708176000, 0), EventType: "WindDirection", Value: 180},
 
-		{DeviceId: 124, Time: 1708176000, EventType: "Pressure", Value: 1037},
-		{DeviceId: 124, Time: 1708176000, EventType: "Temperature", Value: 20.5},
-		{DeviceId: 124, Time: 1708176000, EventType: "Humidity", Value: 0.5},
-		{DeviceId: 124, Time: 1708176000, EventType: "WindSpeed", Value: 5.5},
-		{DeviceId: 124, Time: 1708176000, EventType: "WindDirection", Value: 180},
+		{DeviceId: 124, Time: time.Unix(1708176000, 0), EventType: "Pressure", Value: 1037},
+		{DeviceId: 124, Time: time.Unix(1708176000, 0), EventType: "Temperature", Value: 20.5},
+		{DeviceId: 124, Time: time.Unix(1708176000, 0), EventType: "Humidity", Value: 0.5},
+		{DeviceId: 124, Time: time.Unix(1708176000, 0), EventType: "WindSpeed", Value: 5.5},
+		{DeviceId: 124, Time: time.Unix(1708176000, 0), EventType: "WindDirection", Value: 180},
 	}
 
 	for _, event := range some_events {
@@ -109,4 +110,20 @@ func main() {
 			}
 		}
 	}
+}
+
+
+func main() {
+	iso8601Timestamp := "2024-02-17T20:13:55+0000"
+
+    layout := "2006-01-02T15:04:05-0700"
+
+	// Parse ISO 8601 timestamp
+	parsedTime, err := time.Parse(layout, iso8601Timestamp)
+	if err != nil {
+		fmt.Println("Error parsing time:", err)
+		return
+	}
+
+	fmt.Println("Parsed time:", parsedTime)
 }

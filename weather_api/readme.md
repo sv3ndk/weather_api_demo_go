@@ -16,8 +16,13 @@ Obtain the URL of the public API:
 aws cloudformation describe-stacks --stack-name weather-api-demo --query 'Stacks[0].Outputs[?OutputKey==`WeatherAPI`].OutputValue' --output text
 ```
 
+Tail the logs:
+```sh
+sam logs -n WeatherReadFrontendFunction --stack-name weather-api-demo --tail
+```
+
 Then simply send a request:
 
 ```sh
-curl -X GET
+curl -X GET https://../weather?device_id=1&from=2024-02-17T20:13:25Z&to=2024-02-17T20:13:55Z'
 ```
