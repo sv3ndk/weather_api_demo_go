@@ -1,17 +1,49 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/expression"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 )
 
+var dynamoClient *dynamodb.Client
+var dynamoTable *string
+
+// prints any stuct. This is convenient since it dereference all pointers
+func logAny(v any) {
+	j, err := json.Marshal(v)
+	if err != nil {
+		log.Println(err)
+	}
+	log.Println(string(j))
+}
+
+func init() {
+	dynamoTable = aws.String(os.Getenv("DYNAMO_TABLE"))
+
+	awsCfg, err := config.LoadDefaultConfig(context.TODO())
+	if err != nil {
+		panic(err)
+	}
+
+	dynamoClient = dynamodb.NewFromConfig(awsCfg)
+}
+
 type InputParams struct {
-	DeviceId string
+	DeviceId int64
 	FromTime time.Time
 	ToTime   time.Time
 }
@@ -26,10 +58,15 @@ type WeatherEvent struct {
 // expects a query string like ?device_id=1&from=2024-02-17T20:13:25%2B0100&to=2024-02-17T20:13:55%2B0100'
 // ('%2B' is the URL encoding of '+')
 func parseParams(params map[string]string) (InputParams, error) {
-	deviceId, ok1 := params["device_id"]
+	deviceIdStr, ok1 := params["device_id"]
 	fromTimeIso, ok2 := params["from"]
 	toTimeIso, ok3 := params["to"]
 	if !(ok1 && ok2 && ok3) {
+		return InputParams{}, errors.New("missing or invalid query params")
+	}
+
+	deviceId, err := strconv.Atoi(deviceIdStr)
+	if err != nil {
 		return InputParams{}, errors.New("missing or invalid query params")
 	}
 
@@ -44,10 +81,58 @@ func parseParams(params map[string]string) (InputParams, error) {
 	}
 
 	return InputParams{
-		DeviceId: deviceId,
+		DeviceId: int64(deviceId),
 		FromTime: fromTime,
 		ToTime:   toTime,
 	}, nil
+}
+
+func queryDb(inputParams InputParams) ([]WeatherEvent, error) {
+	log.Println("will use dynamo table ", *dynamoTable)
+
+	expr, err := expression.NewBuilder().
+		WithKeyCondition(
+			expression.KeyAnd(
+				expression.Key("PK").Equal(expression.Value(fmt.Sprintf("DeviceId#%d", inputParams.DeviceId))),
+				expression.Key("SK").Between(
+					expression.Value(fmt.Sprintf("Time#%d", inputParams.FromTime.Unix()-1)),
+					expression.Value(fmt.Sprintf("Time#%d", inputParams.ToTime.Unix()+1)),
+				),
+			),
+		).
+		Build()
+
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
+
+	queryResult, err := dynamoClient.Query(
+		context.TODO(),
+		&dynamodb.QueryInput{
+			TableName:                 dynamoTable,
+			KeyConditionExpression:    expr.KeyCondition(),
+			ExpressionAttributeNames:  expr.Names(),
+			ExpressionAttributeValues: expr.Values(),
+		},
+	)
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
+
+	var events []WeatherEvent
+
+	for _, rawEvent := range queryResult.Items {
+		event := WeatherEvent{}
+		attributevalue.UnmarshalMap(rawEvent, &event)
+		events = append(events, event)
+	}
+
+	fmt.Println("dynamo result:")
+	logAny(queryResult)
+
+	return events, nil
 }
 
 func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
@@ -60,16 +145,25 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	}
 	log.Println("input Params", inputParams)
 
-	var greeting string
-	sourceIP := request.RequestContext.Identity.SourceIP
-	if sourceIP == "" {
-		greeting = "Hello, world!\n"
-	} else {
-		greeting = fmt.Sprintf("Hello, %s!\n", sourceIP)
+	weatherEvents, err := queryDb(inputParams)
+	if err != nil {
+		return events.APIGatewayProxyResponse{
+			Body:       err.Error(),
+			StatusCode: 500,
+		}, nil
+	}
+	log.Println("returning events", weatherEvents)
+
+	jsonBytes, err := json.Marshal(weatherEvents)
+	if err != nil {
+		return events.APIGatewayProxyResponse{
+			Body:       err.Error(),
+			StatusCode: 500,
+		}, nil
 	}
 
 	return events.APIGatewayProxyResponse{
-		Body:       greeting,
+		Body:       string(jsonBytes),
 		StatusCode: 200,
 	}, nil
 }
@@ -77,3 +171,22 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 func main() {
 	lambda.Start(handler)
 }
+
+// func main() {
+
+// 	p := InputParams{
+// 		DeviceId: 123,
+// 		FromTime: time.Unix(1708176000, 0),
+// 		ToTime:   time.Unix(1708176000, 0),
+// 	}
+
+// 	events, err := queryDb(p)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	fmt.Println("found events:")
+// 	logAny(events)
+
+// 	json.Marshal(events)
+
+// }

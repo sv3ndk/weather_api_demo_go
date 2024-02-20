@@ -66,7 +66,7 @@ func addSample(ctx context.Context, client *dynamodb.Client, event WeatherEvent,
 		ctx,
 		&dynamodb.PutItemInput{
 			Item:      asMap,
-			TableName: aws.String("weather-api-demo-WeatherDynamoTable-1N9WZZRBZNKLM"),
+			TableName: aws.String("weather-api-demo-WeatherDynamoTable-SUD97CERSXYR"),
 		},
 	)
 	if err != nil {
@@ -78,15 +78,15 @@ func addSample(ctx context.Context, client *dynamodb.Client, event WeatherEvent,
 	return nil
 }
 
-func mainn() {
+func main() {
 	log.Println("Populating DynamoDB with dummy weather data")
 	ctx := context.Background()
 
-	sdk_config, err := config.LoadDefaultConfig(ctx)
+	sdkConfig, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
 		log.Fatal("Could not connect to dynamo ", err)
 	}
-	dynamoClient := dynamodb.NewFromConfig(sdk_config)
+	dynamoClient := dynamodb.NewFromConfig(sdkConfig)
 
 	some_events := []WeatherEvent{
 		{DeviceId: 123, Time: time.Unix(1708176000, 0), EventType: "Pressure", Value: 1037},
@@ -110,20 +110,4 @@ func mainn() {
 			}
 		}
 	}
-}
-
-
-func main() {
-	iso8601Timestamp := "2024-02-17T20:13:55+0000"
-
-    layout := "2006-01-02T15:04:05-0700"
-
-	// Parse ISO 8601 timestamp
-	parsedTime, err := time.Parse(layout, iso8601Timestamp)
-	if err != nil {
-		fmt.Println("Error parsing time:", err)
-		return
-	}
-
-	fmt.Println("Parsed time:", parsedTime)
 }

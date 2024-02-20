@@ -6,8 +6,6 @@ Resources:
 
   WeatherDynamoTable:
     Type: AWS::DynamoDB::Table
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
     Properties:
       AttributeDefinitions:
         - AttributeName: PK
@@ -41,7 +39,11 @@ Resources:
             Method: GET
       Environment: # More info about Env Vars: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#environment-object
         Variables:
-          PARAM1: VALUE
+          DYNAMO_TABLE: !Ref WeatherDynamoTable
+      Policies: 
+        - DynamoDBReadPolicy:
+            TableName: !Ref WeatherDynamoTable
+
 Outputs:
   WeatherDynamoTableName:
     Value: !Ref WeatherDynamoTable
