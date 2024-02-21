@@ -4,3 +4,4 @@ samconfig.toml
 # compilation result
 populate_samples/weather_demo_populate
 
+.vscode

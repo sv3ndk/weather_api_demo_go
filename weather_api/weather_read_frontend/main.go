@@ -22,15 +22,6 @@ import (
 var dynamoClient *dynamodb.Client
 var dynamoTable *string
 
-// prints any stuct. This is convenient since it dereference all pointers
-func logAny(v any) {
-	j, err := json.Marshal(v)
-	if err != nil {
-		log.Println(err)
-	}
-	log.Println(string(j))
-}
-
 func init() {
 	dynamoTable = aws.String(os.Getenv("DYNAMO_TABLE"))
 
@@ -40,6 +31,15 @@ func init() {
 	}
 
 	dynamoClient = dynamodb.NewFromConfig(awsCfg)
+}
+
+// prints any stuct. This is convenient since it dereference all pointers
+func logAny(v any) {
+	j, err := json.Marshal(v)
+	if err != nil {
+		log.Println(err)
+	}
+	log.Println(string(j))
 }
 
 type InputParams struct {
@@ -88,7 +88,7 @@ func parseParams(params map[string]string) (InputParams, error) {
 }
 
 func queryDb(inputParams InputParams) ([]WeatherEvent, error) {
-	log.Println("will use dynamo table ", *dynamoTable)
+	log.Printf("will use dynamo table %s and query params %s\n", *dynamoTable, inputParams)
 
 	expr, err := expression.NewBuilder().
 		WithKeyCondition(
@@ -107,6 +107,11 @@ func queryDb(inputParams InputParams) ([]WeatherEvent, error) {
 		return nil, err
 	}
 
+	log.Printf("key condition: %s\n")
+	logAny(expr.KeyCondition())
+	logAny(expr.Names())
+	logAny(expr.Values())
+
 	queryResult, err := dynamoClient.Query(
 		context.TODO(),
 		&dynamodb.QueryInput{
@@ -121,16 +126,12 @@ func queryDb(inputParams InputParams) ([]WeatherEvent, error) {
 		return nil, err
 	}
 
-	var events []WeatherEvent
-
+	events := []WeatherEvent{}
 	for _, rawEvent := range queryResult.Items {
 		event := WeatherEvent{}
 		attributevalue.UnmarshalMap(rawEvent, &event)
 		events = append(events, event)
 	}
-
-	fmt.Println("dynamo result:")
-	logAny(queryResult)
 
 	return events, nil
 }
@@ -143,7 +144,6 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 			StatusCode: 400,
 		}, nil
 	}
-	log.Println("input Params", inputParams)
 
 	weatherEvents, err := queryDb(inputParams)
 	if err != nil {
@@ -162,8 +162,15 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		}, nil
 	}
 
+	var body string
+	if jsonBytes == nil {
+		body = "{}"
+	} else {
+		body = string(jsonBytes)
+	}
+
 	return events.APIGatewayProxyResponse{
-		Body:       string(jsonBytes),
+		Body:       body,
 		StatusCode: 200,
 	}, nil
 }
@@ -171,22 +178,3 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 func main() {
 	lambda.Start(handler)
 }
-
-// func main() {
-
-// 	p := InputParams{
-// 		DeviceId: 123,
-// 		FromTime: time.Unix(1708176000, 0),
-// 		ToTime:   time.Unix(1708176000, 0),
-// 	}
-
-// 	events, err := queryDb(p)
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	fmt.Println("found events:")
-// 	logAny(events)
-
-// 	json.Marshal(events)
-
-// }
