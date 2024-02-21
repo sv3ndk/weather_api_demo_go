@@ -9,6 +9,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -148,8 +150,7 @@ func addSample(ctx context.Context, client *dynamodb.Client, event WeatherEvent)
 	return nil
 }
 
-// TODO: move this to a lambda triggered from Event bridge
-func main() {
+func genData() error {
 	log.Println("generating random weather event")
 
 	events := []WeatherEvent{}
@@ -163,7 +164,20 @@ func main() {
 	for _, weatherEvent := range events {
 		err := addSample(ctx, dynamodbClient, weatherEvent)
 		if err != nil {
-			log.Fatal("Could not insert event into Dynamodb", err)
+			return err
 		}
 	}
+	return nil
+}
+
+// cf https://github.com/aws/aws-lambda-go/blob/main/events/README_EventBridge_Events.md
+func handler(ctx context.Context, request events.EventBridgeEvent) {
+	err := genData()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func main() {
+	lambda.Start(handler)
 }

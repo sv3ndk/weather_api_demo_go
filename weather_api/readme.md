@@ -25,7 +25,9 @@ sam logs -n WeatherReadFrontendFunction --stack-name weather-api-demo --tail
 Send a request:
 
 ```sh
-curl -X GET 'https://...amazonaws.com/Prod/weather?device_id=123&from=2023-02-17T20:13:25%2B0100&to=2025-02-17T20:13:55%2B0100'
+# any device_id between 1000 and 1009
+# '%2B' is the '+' in the ISO8601 timestamp
+curl -X GET 'https://...amazonaws.com/Prod/weather?device_id=1005&from=2023-02-17T20:13:25%2B0100&to=2025-02-17T20:13:55%2B0100'
 ```
 
 ## References
@@ -37,6 +39,9 @@ curl -X GET 'https://...amazonaws.com/Prod/weather?device_id=123&from=2023-02-17
 
 * AWS GO SDK v2:
   https://aws.github.io/aws-sdk-go-v2/docs/making-requests/ 
+
+* Lambda events for each kind of integration:
+  https://github.com/aws/aws-lambda-go/tree/main/events
 
 ### Golang AWS DynamoDB SDK  
 

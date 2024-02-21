@@ -107,7 +107,7 @@ func queryDb(inputParams InputParams) ([]WeatherEvent, error) {
 		return nil, err
 	}
 
-	log.Printf("key condition: %s\n")
+	log.Printf("key condition:")
 	logAny(expr.KeyCondition())
 	logAny(expr.Names())
 	logAny(expr.Values())
@@ -136,7 +136,7 @@ func queryDb(inputParams InputParams) ([]WeatherEvent, error) {
 	return events, nil
 }
 
-func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	inputParams, err := parseParams(request.QueryStringParameters)
 	if err != nil {
 		return events.APIGatewayProxyResponse{

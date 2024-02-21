@@ -22,7 +22,7 @@ Resources:
         PointInTimeRecoveryEnabled: false
 
   WeatherReadFrontendFunction:
-    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Type: AWS::Serverless::Function 
     Metadata:
       BuildMethod: makefile
     Properties:
@@ -33,15 +33,37 @@ Resources:
         - x86_64
       Events:
         CatchAll:
-          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Type: Api 
           Properties:
             Path: /weather
             Method: GET
-      Environment: # More info about Env Vars: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#environment-object
+      Environment: 
         Variables:
           DYNAMO_TABLE: !Ref WeatherDynamoTable
       Policies: 
         - DynamoDBReadPolicy:
+            TableName: !Ref WeatherDynamoTable
+
+  WeatherDataGeneratorFunction:
+    Type: AWS::Serverless::Function 
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: weather_data_generator/
+      Handler: bootstrap
+      Runtime: provided.al2023
+      Architectures:
+        - x86_64
+      Events:
+        Clock:
+          Type:  ScheduleV2
+          Properties:
+            ScheduleExpression: rate(1 minute)
+      Environment: 
+        Variables:
+          DYNAMO_TABLE: !Ref WeatherDynamoTable
+      Policies: 
+        - DynamoDBCrudPolicy:
             TableName: !Ref WeatherDynamoTable
 
 Outputs:
