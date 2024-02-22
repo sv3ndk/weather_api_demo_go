@@ -6,6 +6,7 @@ Demo of a AWS API Gateway app with a REST endpoint and a websocket connection
 
 - Basic REST API returning value read from DynamoDB (no security)
 - Lambda function triggered every minute adding some events to Dynamo
+- Rest client sending basic GET request
 
 ## TODO
 

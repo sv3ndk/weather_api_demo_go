@@ -33,15 +33,6 @@ func init() {
 	dynamoClient = dynamodb.NewFromConfig(awsCfg)
 }
 
-// prints any stuct. This is convenient since it dereference all pointers
-func logAny(v any) {
-	j, err := json.Marshal(v)
-	if err != nil {
-		log.Println(err)
-	}
-	log.Println(string(j))
-}
-
 type InputParams struct {
 	DeviceId int64
 	FromTime time.Time
@@ -107,11 +98,6 @@ func queryDb(inputParams InputParams) ([]WeatherEvent, error) {
 		return nil, err
 	}
 
-	log.Printf("key condition:")
-	logAny(expr.KeyCondition())
-	logAny(expr.Names())
-	logAny(expr.Values())
-
 	queryResult, err := dynamoClient.Query(
 		context.TODO(),
 		&dynamodb.QueryInput{
@@ -136,6 +122,7 @@ func queryDb(inputParams InputParams) ([]WeatherEvent, error) {
 	return events, nil
 }
 
+// cf https://github.com/aws/aws-lambda-go/blob/main/events/README_ApiGatewayEvent.md
 func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	inputParams, err := parseParams(request.QueryStringParameters)
 	if err != nil {
