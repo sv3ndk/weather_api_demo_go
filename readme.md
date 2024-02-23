@@ -4,21 +4,25 @@ Demo of a AWS API Gateway app with a REST endpoint and a websocket connection
 
 ## Status
 
-- Basic REST API returning value read from DynamoDB (no security)
-- Lambda function triggered every minute adding some events to Dynamo
-- Rest client sending basic GET request
+- Data generator lambda is triggered every minute and adds random events to DynamoDB
+- REST API exposed via API Gateway to query events from DynamoDB
+- The REST API authorization and throttling are based on API keys
+- CLI client app to query the REST endpoint and obtain the last n minutes of events
 
 ## TODO
 
 * add websocket API to be notified of any new event + demo that prints stuff to stdout (should be startable several times)
+* add Webocket security: first request a temp token through REST, then pass it in the `connect` wss phase
+* add custom domain name
+* setup mutual TLS for the REST endoipn (cf https://docs.aws.amazon.com/apigateway/latest/developerguide/rest-api-mutual-tls.html
+   and https://venilnoronha.io/a-step-by-step-guide-to-mtls-in-go )
 * improve data generator: use a step function to parallelize per battery (useless, but I want to...)
 * re-use code across packages (data model)
-* add custom domain name
-* setup mutual TLS https://docs.aws.amazon.com/apigateway/latest/developerguide/rest-api-mutual-tls.html
+* add OpenAPI spec to REST endpoint
 
 ## References
 
-### Golang AWS SDK
+### Go AWS SDK
 
 * High level discussion:
   https://aws.github.io/aws-sdk-go-v2/docs/
@@ -29,7 +33,7 @@ Demo of a AWS API Gateway app with a REST endpoint and a websocket connection
 * Lambda events for each kind of integration:
   https://github.com/aws/aws-lambda-go/tree/main/events
 
-### Golang AWS DynamoDB SDK  
+### Go DynamoDB SDK  
 
 * API client, operations, and parameter types for Amazon DynamoDB. 
   https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/dynamodb#Client
@@ -43,7 +47,16 @@ Demo of a AWS API Gateway app with a REST endpoint and a websocket connection
 * AWS GO SDK examples
   https://github.com/awsdocs/aws-doc-sdk-examples/tree/main/go
 
-### AWS Lambda implementation in go
+### Lambda implementation in Go
 
 * Go lambda handler
   https://docs.aws.amazon.com/lambda/latest/dg/golang-handler.html
+  
+* Go AWS events 
+  https://github.com/aws/aws-lambda-go/blob/main/events/
+
+### Security
+
+* API Gateways usage plans and API keys
+  https://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-api-usage-plans.html
+  

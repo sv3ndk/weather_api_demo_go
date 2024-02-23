@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand"
@@ -31,21 +30,11 @@ func init() {
 	dynamodbClient = dynamodb.NewFromConfig(sdkConfig)
 }
 
-// I've copy/pasted this everywhere because I have no shame :)
 type WeatherEvent struct {
 	DeviceId  int64
 	Time      time.Time
 	EventType string
 	Value     float64
-}
-
-// prints any stuct. This is convenient since it dereference all pointers
-func logAny(v any) {
-	j, err := json.Marshal(v)
-	if err != nil {
-		log.Println(err)
-	}
-	log.Println(string(j))
 }
 
 func randomPressureEvent(deviceId int64) WeatherEvent {
@@ -104,9 +93,6 @@ func randomEvents(deviceId int64) []WeatherEvent {
 }
 
 func addSample(ctx context.Context, client *dynamodb.Client, event WeatherEvent) error {
-
-	log.Printf("Inserting event into DynamoDB: %+v\n", event)
-
 	// There is also attributevalue.MarshalMap(event) in aws-sdk-go-v2/feature/dynamodb/attributevalue but
 	// which reduce the boiler plate, but needs to be completed with "PK", "SK" and potentially
 	// adjusted for any DynamoDB expression attribute name
@@ -132,9 +118,8 @@ func addSample(ctx context.Context, client *dynamodb.Client, event WeatherEvent)
 			Value: fmt.Sprintf("%d", event.Time.Unix()),
 		},
 	}
-	logAny(asMap)
 
-	output, err := client.PutItem(
+	_, err := client.PutItem(
 		ctx,
 		&dynamodb.PutItemInput{
 			Item:      asMap,
@@ -142,11 +127,9 @@ func addSample(ctx context.Context, client *dynamodb.Client, event WeatherEvent)
 		},
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("error while inserting event %v in DyanmoDB %w", event, err)
 	}
 
-	log.Println("insertion result:")
-	logAny(output)
 	return nil
 }
 
@@ -154,19 +137,19 @@ func genData() error {
 	log.Println("generating random weather event")
 
 	events := []WeatherEvent{}
-
 	for i := range 10 {
 		deviceId := int64(1000 + i)
 		events = append(events, randomEvents(deviceId)...)
 	}
 
-	log.Println("Created weather event")
 	for _, weatherEvent := range events {
 		err := addSample(ctx, dynamodbClient, weatherEvent)
 		if err != nil {
 			return err
 		}
 	}
+
+	log.Println("done")
 	return nil
 }
 

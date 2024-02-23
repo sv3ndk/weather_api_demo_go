@@ -22,12 +22,14 @@ import (
 var dynamoClient *dynamodb.Client
 var dynamoTable *string
 
+const iso8601Tormat = "2006-01-02T15:04:05-0700"
+
 func init() {
 	dynamoTable = aws.String(os.Getenv("DYNAMO_TABLE"))
 
 	awsCfg, err := config.LoadDefaultConfig(context.TODO())
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	dynamoClient = dynamodb.NewFromConfig(awsCfg)
@@ -46,8 +48,8 @@ type WeatherEvent struct {
 	Value     float64
 }
 
-// expects a query string like ?device_id=1&from=2024-02-17T20:13:25%2B0100&to=2024-02-17T20:13:55%2B0100'
-// ('%2B' is the URL encoding of '+')
+// expects an (encoded) query string like ?device_id=1&from=2024-02-17T20:13:25+0100&to=2024-02-17T20:13:55+0100'
+// ('+' needs to be encoded into '%2B' in the URL)
 func parseParams(params map[string]string) (InputParams, error) {
 	deviceIdStr, ok1 := params["device_id"]
 	fromTimeIso, ok2 := params["from"]
@@ -58,10 +60,8 @@ func parseParams(params map[string]string) (InputParams, error) {
 
 	deviceId, err := strconv.Atoi(deviceIdStr)
 	if err != nil {
-		return InputParams{}, errors.New("missing or invalid query params")
+		return InputParams{}, errors.New("missing or invalid device_id param")
 	}
-
-	iso8601Tormat := "2006-01-02T15:04:05-0700"
 
 	fromTime, err1 := time.Parse(iso8601Tormat, fromTimeIso)
 	toTime, err2 := time.Parse(iso8601Tormat, toTimeIso)
@@ -79,7 +79,7 @@ func parseParams(params map[string]string) (InputParams, error) {
 }
 
 func queryDb(inputParams InputParams) ([]WeatherEvent, error) {
-	log.Printf("will use dynamo table %s and query params %s\n", *dynamoTable, inputParams)
+	log.Printf("will use dynamo table %s and query params %v\n", *dynamoTable, inputParams)
 
 	expr, err := expression.NewBuilder().
 		WithKeyCondition(
@@ -95,7 +95,7 @@ func queryDb(inputParams InputParams) ([]WeatherEvent, error) {
 
 	if err != nil {
 		fmt.Println(err)
-		return nil, err
+		return nil, fmt.Errorf("error while building DynamoDB query: %w", err)
 	}
 
 	queryResult, err := dynamoClient.Query(
@@ -108,8 +108,7 @@ func queryDb(inputParams InputParams) ([]WeatherEvent, error) {
 		},
 	)
 	if err != nil {
-		fmt.Println(err)
-		return nil, err
+		return nil, fmt.Errorf("error while querying DynamodDB: %w", err)
 	}
 
 	events := []WeatherEvent{}
@@ -126,6 +125,7 @@ func queryDb(inputParams InputParams) ([]WeatherEvent, error) {
 func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	inputParams, err := parseParams(request.QueryStringParameters)
 	if err != nil {
+		log.Println(err)
 		return events.APIGatewayProxyResponse{
 			Body:       err.Error(),
 			StatusCode: 400,
@@ -134,15 +134,17 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	weatherEvents, err := queryDb(inputParams)
 	if err != nil {
+		log.Println(err)
 		return events.APIGatewayProxyResponse{
 			Body:       err.Error(),
 			StatusCode: 500,
 		}, nil
 	}
-	log.Println("returning events", weatherEvents)
+	log.Printf("found %d events", len(weatherEvents))
 
 	jsonBytes, err := json.Marshal(weatherEvents)
 	if err != nil {
+		log.Println(err)
 		return events.APIGatewayProxyResponse{
 			Body:       err.Error(),
 			StatusCode: 500,

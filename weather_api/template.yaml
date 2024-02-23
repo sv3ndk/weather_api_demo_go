@@ -2,6 +2,12 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: weather_api_demo 
 
+Parameters:
+  StageName:
+    Type: String
+    Default: v1
+    Description: Name of API stage.
+
 Resources:
 
   WeatherDynamoTable:
@@ -20,29 +26,6 @@ Resources:
       BillingMode: PAY_PER_REQUEST
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: false
-
-  WeatherReadFrontendFunction:
-    Type: AWS::Serverless::Function 
-    Metadata:
-      BuildMethod: makefile
-    Properties:
-      CodeUri: weather_read_frontend/
-      Handler: bootstrap
-      Runtime: provided.al2023
-      Architectures:
-        - x86_64
-      Events:
-        CatchAll:
-          Type: Api 
-          Properties:
-            Path: /weather
-            Method: GET
-      Environment: 
-        Variables:
-          DYNAMO_TABLE: !Ref WeatherDynamoTable
-      Policies: 
-        - DynamoDBReadPolicy:
-            TableName: !Ref WeatherDynamoTable
 
   WeatherDataGeneratorFunction:
     Type: AWS::Serverless::Function 
@@ -66,14 +49,111 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName: !Ref WeatherDynamoTable
 
+
+
+  WeatherReadFrontendApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Description: REST API providing read access to weather events
+      StageName: !Sub '${StageName}'
+      ApiKeySourceType: HEADER
+      Auth:
+        ApiKeyRequired: true    # requiring an API key for all methods
+
+
+  WeatherReadFrontendBasicUsagePlan:
+    Type: AWS::ApiGateway::UsagePlan
+    DependsOn:
+      - WeatherReadFrontendApiStage   # this is a hack. What I really want to wait for is WeatherReadFrontendApi.Deployment
+    Properties:
+      Description: Basic usage plan for the REST API
+      ApiStages:
+        - ApiId: !Ref WeatherReadFrontendApi
+          Stage: !Sub '${StageName}'
+          Throttle:
+            "/weather/GET": 
+              RateLimit: 50.0   
+              BurstLimit: 100
+      Quota:
+        Limit: 1000
+        Period: MONTH
+      Throttle:
+        RateLimit: 100.0
+        BurstLimit: 200
+      UsagePlanName: "Basic"      
+
+  # 2 API Keys to be used by customer1 for the REST API
+  WeatherReadFrontendApiKeyCustomer1:
+    Type: AWS::ApiGateway::ApiKey
+    Properties: 
+      Description: API Key
+      Name: 'Customer1'
+      Enabled: True
+
+  Customer1HasBasicPlan:
+    Type: AWS::ApiGateway::UsagePlanKey
+    Properties:
+      KeyId: !Ref WeatherReadFrontendApiKeyCustomer1
+      KeyType: API_KEY
+      UsagePlanId: !Ref WeatherReadFrontendBasicUsagePlan
+
+  WeatherReadFrontendApiKeyCustomer2:
+    Type: AWS::ApiGateway::ApiKey
+    Properties: 
+      Description: API Key
+      Name: 'Customer2'
+      Enabled: True
+
+  Customer2HasBasicPlan:
+    Type: AWS::ApiGateway::UsagePlanKey
+    Properties:
+      KeyId: !Ref WeatherReadFrontendApiKeyCustomer2
+      KeyType: API_KEY
+      UsagePlanId: !Ref WeatherReadFrontendBasicUsagePlan
+
+
+
+  WeatherReadFrontendFunction:
+    Type: AWS::Serverless::Function 
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: weather_read_frontend/
+      Handler: bootstrap
+      Runtime: provided.al2023
+      Architectures:
+        - x86_64
+      Events:
+        CatchAll:
+          Type: Api 
+          Properties:
+            RestApiId: !Ref WeatherReadFrontendApi
+            Path: /weather
+            Method: GET
+      Environment: 
+        Variables:
+          DYNAMO_TABLE: !Ref WeatherDynamoTable
+      Policies: 
+        - DynamoDBReadPolicy:
+            TableName: !Ref WeatherDynamoTable
+
 Outputs:
   WeatherDynamoTableName:
+    Description: DynamoDB table name
     Value: !Ref WeatherDynamoTable
 
   WeatherDynamoTableNameArn :
+    Description: DynamoDB table ARN
     Value: !GetAtt WeatherDynamoTable.Arn
 
   WeatherAPI:
-    Description: "API Gateway endpoint URL"
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/weather/"
+    Description: "REST API endpoint URL"
+    Value: !Sub "https://${WeatherReadFrontendApi}.execute-api.${AWS::Region}.amazonaws.com/${StageName}/weather/"
 
+  Customer1ApiKeyId:
+    Description: "ID of the API key 1 to be used by the client to the REST API"
+    Value: !Ref WeatherReadFrontendApiKeyCustomer1
+
+  Customer2ApiKeyId:
+    Description: "ID of the API key 2 to be used by the client to the REST API"
+    Value: !Ref WeatherReadFrontendApiKeyCustomer2

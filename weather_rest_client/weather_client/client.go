@@ -20,12 +20,14 @@ type WeatherEvent struct {
 type WeatherClient struct {
 	ApiUrl     string
 	httpClient *http.Client
+	apiKey     string
 }
 
-func New(url string) WeatherClient {
+func New(url, apiKey string) WeatherClient {
 	return WeatherClient{
 		ApiUrl:     url,
 		httpClient: &http.Client{},
+		apiKey:     apiKey,
 	}
 }
 
@@ -42,10 +44,10 @@ func (c WeatherClient) QueryEvents(deviceId int, fromTime time.Time, toTime time
 	q.Add("device_id", fmt.Sprint(deviceId))
 	q.Add("from", fromTime.Format(iso8601Format))
 	q.Add("to", toTime.Format(iso8601Format))
-
 	req.URL.RawQuery = q.Encode()
 	log.Printf("querying URL %s", req.URL.String())
 
+	req.Header["X-API-Key"] = []string{c.apiKey}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("could not query API: %w", err)
