@@ -13,11 +13,11 @@ sam deploy
 Obtain the URL of the public API:
 
 ```sh
-    aws cloudformation describe-stacks --stack-name weather-api-demo --query 'Stacks[0].Outputs[?OutputKey==`WeatherAPI`].OutputValue' --output text
+    aws cloudformation describe-stacks --stack-name weather-api-demo --query 'Stacks[0].Outputs[?OutputKey==`WeatherAPIRestEndpoint`].OutputValue' --output text
 ```
 
 Obtain the API key id
-```
+    ```sh
 # Customer1ApiKeyId or Customer2ApiKeyId here
 aws cloudformation describe-stacks --stack-name weather-api-demo --query 'Stacks[0].Outputs[?OutputKey==`Customer1ApiKeyId`].OutputValue' --output text
 

@@ -3,59 +3,25 @@ Transform: AWS::Serverless-2016-10-31
 Description: weather_api_demo 
 
 Parameters:
-  StageName:
+  RestStageName:
     Type: String
     Default: v1
-    Description: Name of API stage.
+    Description: REST API stage name
+
+  WsStageName:
+    Type: String
+    Default: v1
+    Description: Websocket stage name
 
 Resources:
-
-  WeatherDynamoTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      AttributeDefinitions:
-        - AttributeName: PK
-          AttributeType: S
-        - AttributeName: SK
-          AttributeType: S
-      KeySchema:
-        - AttributeName: PK
-          KeyType: HASH
-        - AttributeName: SK
-          KeyType: RANGE
-      BillingMode: PAY_PER_REQUEST
-      PointInTimeRecoverySpecification:
-        PointInTimeRecoveryEnabled: false
-
-  WeatherDataGeneratorFunction:
-    Type: AWS::Serverless::Function 
-    Metadata:
-      BuildMethod: makefile
-    Properties:
-      CodeUri: weather_data_generator/
-      Handler: bootstrap
-      Runtime: provided.al2023
-      Architectures:
-        - x86_64
-      Events:
-        Clock:
-          Type:  ScheduleV2
-          Properties:
-            ScheduleExpression: rate(1 minute)
-      Environment: 
-        Variables:
-          DYNAMO_TABLE: !Ref WeatherDynamoTable
-      Policies: 
-        - DynamoDBCrudPolicy:
-            TableName: !Ref WeatherDynamoTable
-
-
+  # -----------------------
+  # Request / Response API
 
   WeatherReadFrontendApi:
     Type: AWS::Serverless::Api
     Properties:
       Description: REST API providing read access to weather events
-      StageName: !Sub '${StageName}'
+      StageName: !Sub '${RestStageName}'
       ApiKeySourceType: HEADER
       Auth:
         ApiKeyRequired: true    # requiring an API key for all methods
@@ -69,7 +35,7 @@ Resources:
       Description: Basic usage plan for the REST API
       ApiStages:
         - ApiId: !Ref WeatherReadFrontendApi
-          Stage: !Sub '${StageName}'
+          Stage: !Sub '${RestStageName}'
           Throttle:
             "/weather/GET": 
               RateLimit: 50.0   
@@ -137,6 +103,205 @@ Resources:
         - DynamoDBReadPolicy:
             TableName: !Ref WeatherDynamoTable
 
+  # -----------------
+  # Real time API
+
+  WeatherWsAPI:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: WeatherWsAPI
+      # ApiKeySelectionExpression: "$request.header.x-api-key"
+      Description: WSS API for real time weather events
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: "$request.body.action"
+
+  WeatherWsOnConnectFunction:
+    Type: AWS::Serverless::Function 
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: weather_ws_on_connect/
+      Handler: bootstrap
+      Runtime: provided.al2023
+      Architectures:
+        - x86_64
+      # Environment: 
+      #   Variables:
+      #     DYNAMO_TABLE: !Ref WeatherDynamoTable
+      # Policies: 
+      #   - DynamoDBReadPolicy:
+      #       TableName: !Ref WeatherDynamoTable
+  WeatherWsOnConnectFunctionMayBeInvokedByAPiGW:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      FunctionName: !Ref WeatherWsOnConnectFunction
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WeatherWsAPI}/*'
+  WeatherWSOnConnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WeatherWsAPI
+      Description: websocket on connect
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WeatherWsOnConnectFunction.Arn}/invocations"
+      # TlsConfig: 
+      #   TlsConfig
+  WeatherWSOnConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WeatherWsAPI
+      # ApiKeyRequired: Boolean
+      RouteKey: '$connect'
+      AuthorizationType: NONE
+      Target: !Sub "integrations/${WeatherWSOnConnectIntegration}"
+
+
+  WeatherWsOnMessageReceivedFunction:
+    Type: AWS::Serverless::Function 
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: weather_ws_on_message_received/
+      Handler: bootstrap
+      Runtime: provided.al2023
+      Architectures:
+        - x86_64
+      # Environment: 
+      #   Variables:
+      #     DYNAMO_TABLE: !Ref WeatherDynamoTable
+      # Policies: 
+      #   - DynamoDBReadPolicy:
+      #       TableName: !Ref WeatherDynamoTable
+  WeatherWsOnMessageReceivedFunctionMayBeInvokedByAPiGW:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      FunctionName: !Ref WeatherWsOnMessageReceivedFunction
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WeatherWsAPI}/*'
+  WeatherWSOnMessageReceivedIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WeatherWsAPI
+      Description: websocket on message received
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WeatherWsOnMessageReceivedFunction.Arn}/invocations"
+      # TlsConfig: 
+      #   TlsConfig
+  WeatherWSOnMessageReceivedRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WeatherWsAPI
+      # ApiKeyRequired: Boolean
+      RouteKey: '$default'
+      AuthorizationType: NONE
+      Target: !Sub "integrations/${WeatherWSOnMessageReceivedIntegration}"
+
+  WeatherWsOnDisconnectFunction:
+    Type: AWS::Serverless::Function 
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: weather_ws_on_disconnect/
+      Handler: bootstrap
+      Runtime: provided.al2023
+      Architectures:
+        - x86_64
+      # Environment: 
+      #   Variables:
+      #     DYNAMO_TABLE: !Ref WeatherDynamoTable
+      # Policies: 
+      #   - DynamoDBReadPolicy:
+      #       TableName: !Ref WeatherDynamoTable
+  WeatherWsOnDisconnectFunctionMayBeInvokedByAPiGW:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      FunctionName: !Ref WeatherWsOnDisconnectFunction
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WeatherWsAPI}/*'
+  WeatherWSOnDisconnectIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WeatherWsAPI
+      Description: websocket on-disconnect
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WeatherWsOnDisconnectFunction.Arn}/invocations"
+      # TlsConfig: 
+      #   TlsConfig
+  WeatherWSOnDisconnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WeatherWsAPI
+      # ApiKeyRequired: Boolean
+      RouteKey: '$disconnect'
+      AuthorizationType: NONE
+      Target: !Sub "integrations/${WeatherWSOnDisconnectIntegration}"
+
+
+  WeatherWsDeployment:
+    Type: AWS::ApiGatewayV2::Deployment
+    DependsOn:
+      - WeatherWSOnConnectRoute
+      - WeatherWSOnMessageReceivedRoute
+      - WeatherWSOnDisconnectRoute
+    Properties:
+      ApiId: !Ref WeatherWsAPI
+  
+  Stage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      StageName: !Ref WsStageName
+      DeploymentId: !Ref WeatherWsDeployment
+      ApiId: !Ref WeatherWsAPI      
+
+
+  # -----------------
+  # Data 
+
+
+  WeatherDynamoTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: false
+
+  WeatherDataGeneratorFunction:
+    Type: AWS::Serverless::Function 
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: weather_data_generator/
+      Handler: bootstrap
+      Runtime: provided.al2023
+      Architectures:
+        - x86_64
+      Events:
+        Clock:
+          Type:  ScheduleV2
+          Properties:
+            ScheduleExpression: rate(1 minute)
+      Environment: 
+        Variables:
+          DYNAMO_TABLE: !Ref WeatherDynamoTable
+      Policies: 
+        - DynamoDBCrudPolicy:
+            TableName: !Ref WeatherDynamoTable
+
+
+
 Outputs:
   WeatherDynamoTableName:
     Description: DynamoDB table name
@@ -146,9 +311,9 @@ Outputs:
     Description: DynamoDB table ARN
     Value: !GetAtt WeatherDynamoTable.Arn
 
-  WeatherAPI:
-    Description: "REST API endpoint URL"
-    Value: !Sub "https://${WeatherReadFrontendApi}.execute-api.${AWS::Region}.amazonaws.com/${StageName}/weather/"
+  WeatherAPIRestEndpoint:
+    Description: "REST API endpoint "
+    Value: !Sub "https://${WeatherReadFrontendApi}.execute-api.${AWS::Region}.amazonaws.com/${RestStageName}/weather/"
 
   Customer1ApiKeyId:
     Description: "ID of the API key 1 to be used by the client to the REST API"
@@ -157,3 +322,7 @@ Outputs:
   Customer2ApiKeyId:
     Description: "ID of the API key 2 to be used by the client to the REST API"
     Value: !Ref WeatherReadFrontendApiKeyCustomer2
+
+  WeatherAPIWsEndpoint:
+    Description: "Websocket API endpoint"
+    Value: !Sub "${WeatherWsAPI.ApiEndpoint}/${WsStageName}"
