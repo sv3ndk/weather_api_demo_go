@@ -17,7 +17,7 @@ Demo of a AWS API Gateway app with a REST endpoint and a websocket connection
 * setup mutual TLS for the REST endoipn (cf https://docs.aws.amazon.com/apigateway/latest/developerguide/rest-api-mutual-tls.html
    and https://venilnoronha.io/a-step-by-step-guide-to-mtls-in-go )
 * improve data generator: use a step function to parallelize per battery (useless, but I want to...)
-* re-use code across packages (data model)
+* lot's of copy/pasted code should be cleaned up :)
 * add OpenAPI spec to REST endpoint
 * review duplicated makefiles and code folder structure
 

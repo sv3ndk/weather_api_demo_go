@@ -10,7 +10,7 @@ Parameters:
 
   WsStageName:
     Type: String
-    Default: v1
+    Default: v3
     Description: Websocket stage name
 
 Resources:
@@ -84,7 +84,7 @@ Resources:
     Metadata:
       BuildMethod: makefile
     Properties:
-      CodeUri: weather_read_frontend/
+      CodeUri: weather_rest_frontend/
       Handler: bootstrap
       Runtime: provided.al2023
       Architectures:
@@ -115,38 +115,36 @@ Resources:
       ProtocolType: WEBSOCKET
       RouteSelectionExpression: "$request.body.action"
 
-  WeatherWsOnConnectFunction:
+  WeatherWsOnConnectionEventFunction:
     Type: AWS::Serverless::Function 
     Metadata:
       BuildMethod: makefile
     Properties:
-      CodeUri: weather_ws_on_connect/
+      CodeUri: weather_ws_on_connection_event/
       Handler: bootstrap
       Runtime: provided.al2023
       Architectures:
         - x86_64
-      # Environment: 
-      #   Variables:
-      #     DYNAMO_TABLE: !Ref WeatherDynamoTable
-      # Policies: 
-      #   - DynamoDBReadPolicy:
-      #       TableName: !Ref WeatherDynamoTable
-  WeatherWsOnConnectFunctionMayBeInvokedByAPiGW:
+      Environment: 
+        Variables:
+          DYNAMO_TABLE: !Ref WeatherDynamoTable
+      Policies: 
+        - DynamoDBCrudPolicy:
+            TableName: !Ref WeatherDynamoTable
+  WeatherWsOnConnectionEventFunctionMayBeInvokedByAPiGW:
     Type: AWS::Lambda::Permission
     Properties:
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
-      FunctionName: !Ref WeatherWsOnConnectFunction
+      FunctionName: !Ref WeatherWsOnConnectionEventFunction
       SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WeatherWsAPI}/*'
-  WeatherWSOnConnectIntegration:
+  WeatherWSOnConnectionEventIntegration:
     Type: AWS::ApiGatewayV2::Integration
     Properties:
       ApiId: !Ref WeatherWsAPI
       Description: websocket on connect
       IntegrationType: AWS_PROXY
-      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WeatherWsOnConnectFunction.Arn}/invocations"
-      # TlsConfig: 
-      #   TlsConfig
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WeatherWsOnConnectionEventFunction.Arn}/invocations"
   WeatherWSOnConnectRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
@@ -154,82 +152,7 @@ Resources:
       # ApiKeyRequired: Boolean
       RouteKey: '$connect'
       AuthorizationType: NONE
-      Target: !Sub "integrations/${WeatherWSOnConnectIntegration}"
-
-
-  WeatherWsOnMessageReceivedFunction:
-    Type: AWS::Serverless::Function 
-    Metadata:
-      BuildMethod: makefile
-    Properties:
-      CodeUri: weather_ws_on_message_received/
-      Handler: bootstrap
-      Runtime: provided.al2023
-      Architectures:
-        - x86_64
-      # Environment: 
-      #   Variables:
-      #     DYNAMO_TABLE: !Ref WeatherDynamoTable
-      # Policies: 
-      #   - DynamoDBReadPolicy:
-      #       TableName: !Ref WeatherDynamoTable
-  WeatherWsOnMessageReceivedFunctionMayBeInvokedByAPiGW:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      Principal: apigateway.amazonaws.com
-      FunctionName: !Ref WeatherWsOnMessageReceivedFunction
-      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WeatherWsAPI}/*'
-  WeatherWSOnMessageReceivedIntegration:
-    Type: AWS::ApiGatewayV2::Integration
-    Properties:
-      ApiId: !Ref WeatherWsAPI
-      Description: websocket on message received
-      IntegrationType: AWS_PROXY
-      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WeatherWsOnMessageReceivedFunction.Arn}/invocations"
-      # TlsConfig: 
-      #   TlsConfig
-  WeatherWSOnMessageReceivedRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId: !Ref WeatherWsAPI
-      # ApiKeyRequired: Boolean
-      RouteKey: '$default'
-      AuthorizationType: NONE
-      Target: !Sub "integrations/${WeatherWSOnMessageReceivedIntegration}"
-
-  WeatherWsOnDisconnectFunction:
-    Type: AWS::Serverless::Function 
-    Metadata:
-      BuildMethod: makefile
-    Properties:
-      CodeUri: weather_ws_on_disconnect/
-      Handler: bootstrap
-      Runtime: provided.al2023
-      Architectures:
-        - x86_64
-      # Environment: 
-      #   Variables:
-      #     DYNAMO_TABLE: !Ref WeatherDynamoTable
-      # Policies: 
-      #   - DynamoDBReadPolicy:
-      #       TableName: !Ref WeatherDynamoTable
-  WeatherWsOnDisconnectFunctionMayBeInvokedByAPiGW:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      Principal: apigateway.amazonaws.com
-      FunctionName: !Ref WeatherWsOnDisconnectFunction
-      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WeatherWsAPI}/*'
-  WeatherWSOnDisconnectIntegration:
-    Type: AWS::ApiGatewayV2::Integration
-    Properties:
-      ApiId: !Ref WeatherWsAPI
-      Description: websocket on-disconnect
-      IntegrationType: AWS_PROXY
-      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WeatherWsOnDisconnectFunction.Arn}/invocations"
-      # TlsConfig: 
-      #   TlsConfig
+      Target: !Sub "integrations/${WeatherWSOnConnectionEventIntegration}"
   WeatherWSOnDisconnectRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
@@ -237,14 +160,14 @@ Resources:
       # ApiKeyRequired: Boolean
       RouteKey: '$disconnect'
       AuthorizationType: NONE
-      Target: !Sub "integrations/${WeatherWSOnDisconnectIntegration}"
+      Target: !Sub "integrations/${WeatherWSOnConnectionEventIntegration}"
 
 
-  WeatherWsDeployment:
+  # force a re-creation of the deployment by using a unique name each time => need to be updated at each re-deploy :(
+  WeatherWsDeployment20230247:
     Type: AWS::ApiGatewayV2::Deployment
     DependsOn:
       - WeatherWSOnConnectRoute
-      - WeatherWSOnMessageReceivedRoute
       - WeatherWSOnDisconnectRoute
     Properties:
       ApiId: !Ref WeatherWsAPI
@@ -253,7 +176,7 @@ Resources:
     Type: AWS::ApiGatewayV2::Stage
     Properties:
       StageName: !Ref WsStageName
-      DeploymentId: !Ref WeatherWsDeployment
+      DeploymentId: !Ref WeatherWsDeployment20230247
       ApiId: !Ref WeatherWsAPI      
 
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
 	"time"
 
@@ -9,13 +10,17 @@ import (
 )
 
 func main() {
-	apiUrl := "wss://pfd41jd2b8.execute-api.eu-central-1.amazonaws.com/v1"
-	log.Println("Querying WS service at ", apiUrl)
+	apiUrl := flag.String("url", "", "URL of the REST endpoint")
+	flag.Parse()
+	if len(*apiUrl) == 0 {
+		flag.Usage()
+	}
 
+	log.Println("Querying WS service at ", *apiUrl)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
-	c, _, err := websocket.Dial(ctx, apiUrl, nil)
+	c, _, err := websocket.Dial(ctx, *apiUrl, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -25,6 +30,8 @@ func main() {
 	// // if err != nil {
 	// // 	// ...
 	// // }
+    
+    time.Sleep(10 * time.Second)
 
 	c.Close(websocket.StatusNormalClosure, "")
 }
