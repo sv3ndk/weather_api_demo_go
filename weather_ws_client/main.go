@@ -30,8 +30,8 @@ func main() {
 	// // if err != nil {
 	// // 	// ...
 	// // }
-    
-    time.Sleep(10 * time.Second)
+
+	time.Sleep(10 * time.Second)
 
 	c.Close(websocket.StatusNormalClosure, "")
 }

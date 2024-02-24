@@ -162,7 +162,6 @@ Resources:
       AuthorizationType: NONE
       Target: !Sub "integrations/${WeatherWSOnConnectionEventIntegration}"
 
-
   # force a re-creation of the deployment by using a unique name each time => need to be updated at each re-deploy :(
   WeatherWsDeployment20230247:
     Type: AWS::ApiGatewayV2::Deployment
@@ -179,6 +178,36 @@ Resources:
       DeploymentId: !Ref WeatherWsDeployment20230247
       ApiId: !Ref WeatherWsAPI      
 
+  WeatherEventWSPushFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      Description: Push new events to currently connected websocket client
+      CodeUri: weather_event_ws_push/
+      Handler: bootstrap
+      Runtime: provided.al2023
+      Architectures:
+        - x86_64
+      Environment: 
+        Variables:
+          DYNAMO_TABLE: !Ref WeatherDynamoTable
+          API_ID: !Ref WeatherWsAPI
+          API_STAGE: !Ref WsStageName
+          AWS_REGION: !Ref AWS::Region
+          
+      Policies: 
+        - DynamoDBReadPolicy:
+            TableName: !Ref WeatherDynamoTable
+      Events:
+        DynamoStream:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt WeatherDynamoTable.StreamArn
+            StartingPosition: TRIM_HORIZON
+            FilterCriteria:
+              Filters:
+                - Pattern: '{ "dynamodb" : { "Keys" : { "PK" : { "S" : [{"prefix": "DeviceId#"}] } } } }'
 
   # -----------------
   # Data 
@@ -198,6 +227,8 @@ Resources:
         - AttributeName: SK
           KeyType: RANGE
       BillingMode: PAY_PER_REQUEST
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: false
 
