@@ -1,18 +1,20 @@
 # Weather API demo
 
-Demo of a AWS API Gateway app with a REST endpoint and a websocket connection
-
 ## Status
 
-- Data generator lambda triggered every minute to add random events to DynamoDB
-- REST API exposed via API Gateway to query events from DynamoDB
-- The REST API authorization and throttling are based on API keys
-- CLI client app to query the REST endpoint and obtain the last n minutes of events
+- a [data generator lambda](weather_api/weather_data_generator/main.go), triggered every minute, adds random weather events to DynamoDB
+- REST integration:
+  * a [REST API](weather_api/weather_rest_frontend/main.go) exposed via the API Gateway allows to query those events. 
+  * Its access and throttling is based on API keys
+  * a [CLI client app](weather_rest_client/weather_client/client.go) queries the REST endpoint and obtain the last n minutes of events
+- websocket integration: 
+  * the [on-connect lambda](weather_api/weather_ws_on_connection_event/main.go) is notified when a websocket client connects or disconnect and keeps track of its connection id
+  * the [ws-push lambda](weather_api/weather_event_ws_push/main.go) is notified when events are added to Dynamodb and forwards them in JSON to all connected clients
+  * a [CLI websocket client](weather_ws_client/main.go) allows to print weather events as they arrive
 
-## TODO
+## TODO (maybe)
 
-* add websocket API to be notified of any new event + demo that prints stuff to stdout (should be startable several times)
-* add Webocket security: first request a temp token through REST, then pass it in the `connect` wss phase
+* add Webocket security: API key? Or first request a temp token through REST, then pass it in the `connect` wss phase
 * add custom domain name
 * setup mutual TLS for the REST endoipn (cf https://docs.aws.amazon.com/apigateway/latest/developerguide/rest-api-mutual-tls.html
    and https://venilnoronha.io/a-step-by-step-guide-to-mtls-in-go )
@@ -24,9 +26,6 @@ Demo of a AWS API Gateway app with a REST endpoint and a websocket connection
 ## References
 
 ### Go AWS SDK
-
-* High level discussion
-  https://aws.github.io/aws-sdk-go-v2/docs/
 
 * AWS GO SDK v2
   https://aws.github.io/aws-sdk-go-v2/docs/making-requests/ 

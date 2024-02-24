@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -13,27 +14,36 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/expression"
+
+	"github.com/aws/aws-sdk-go-v2/service/apigatewaymanagementapi"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 )
 
 var dynamodbClient *dynamodb.Client
 var dynamoTable *string
-var apiID *string
-var apiStage *string
-var awsRegion *string
-var ctx context.Context = context.Background()
+var apiGWManagementClient *apigatewaymanagementapi.Client
 
 func init() {
-	dynamoTable = aws.String(os.Getenv("DYNAMO_TABLE"))
-	apiID = aws.String(os.Getenv("API_ID"))
-	apiStage = aws.String(os.Getenv("API_STAGE"))
-	awsRegion = aws.String(os.Getenv("AWS_REGION"))
-
-	sdkConfig, err := config.LoadDefaultConfig(ctx)
+	sdkConfig, err := config.LoadDefaultConfig(context.Background())
 	if err != nil {
-		log.Fatal("Could not connect to dynamo ", err)
+		log.Fatal("Could not connect to AWS API", err)
 	}
+
+	dynamoTable = aws.String(os.Getenv("DYNAMO_TABLE"))
 	dynamodbClient = dynamodb.NewFromConfig(sdkConfig)
+
+	wsClientCallbackUrl := fmt.Sprintf(
+		"https://%s.execute-api.%s.amazonaws.com/%s",
+		os.Getenv("API_ID"),
+		os.Getenv("AWS_REGION"),
+		os.Getenv("API_STAGE"),
+	)
+	apiGWManagementClient = apigatewaymanagementapi.NewFromConfig(
+		sdkConfig,
+		func(o *apigatewaymanagementapi.Options) {
+			o.BaseEndpoint = &wsClientCallbackUrl
+		},
+	)
 }
 
 func queryActiveSessionIds() ([]string, error) {
@@ -78,7 +88,7 @@ func queryActiveSessionIds() ([]string, error) {
 }
 
 // cf https://github.com/aws/aws-lambda-go/blob/main/events/README_DynamoDB.md
-func handler(ctx context.Context, e events.DynamoDBEvent) {
+func handler(ctx context.Context, event events.DynamoDBEvent) {
 
 	connectionIds, err := queryActiveSessionIds()
 	if err != nil {
@@ -86,24 +96,52 @@ func handler(ctx context.Context, e events.DynamoDBEvent) {
 	}
 
 	if len(connectionIds) > 0 {
+		bytesEvents := [][]byte{}
+		for _, record := range event.Records {
+			// this is a bit lame, though I can't find a better approach
+			// dynamodb basic data types seems to be quite duplicated in a bunch of incompatible packages :(
+			cleanEvent := map[string]any{}
+			for k, v := range record.Change.NewImage {
+				if k != "PK" && k != "SK" {
+					if v.DataType() == events.DataTypeString {
+						cleanEvent[k] = v.String()
+					} else if v.DataType() == events.DataTypeNumber {
+						cleanEvent[k] = v.Number()
+					}
+				}
+			}
+
+			eventBytes, err := json.Marshal(cleanEvent)
+			if err != nil {
+				log.Println("failed to process DynamoDB event", err)
+			} else {
+				bytesEvents = append(bytesEvents, eventBytes)
+			}
+		}
+
 		for _, connectionId := range connectionIds {
-			log.Println("active connections: ", connectionId)
-			clientCallbackUrl := fmt.Sprintf("POST https://%s.execute-api.%s.amazonaws.com/%s/@connections/%s", *apiID, *awsRegion, *apiStage, connectionId)
-			log.Printf("Should now post back to %s", clientCallbackUrl)
+			log.Println("sending records to active ws connection: ", connectionId)
+			for _, event := range bytesEvents {
+				log.Println("sending event", string(event), " to ", connectionId)
+				outp, err := apiGWManagementClient.PostToConnection(
+					ctx,
+					&apigatewaymanagementapi.PostToConnectionInput{
+						ConnectionId: &connectionId,
+						Data:         event,
+					},
+				)
+
+				if err != nil {
+					log.Println("failed to send event ", err)
+				} else {
+					log.Println("send result ", *outp)
+				}
+
+			}
 		}
 	} else {
-		log.Printf("no client is connected atm")
+		log.Println("no WS client connected atm")
 	}
-
-	// for _, record := range e.Records {
-	// 	log.Printf("Processing request data for event ID %s, type %s.\n", record.EventID, record.EventName)
-
-	// 	for name, value := range record.Change.NewImage {
-	// 		if value.DataType() == events.DataTypeString {
-	// 			log.Printf("Attribute name: %s, value: %s\n", name, value.String())
-	// 		}
-	// 	}
-	// }
 }
 
 func main() {

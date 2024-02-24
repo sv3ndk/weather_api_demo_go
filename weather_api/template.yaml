@@ -194,11 +194,12 @@ Resources:
           DYNAMO_TABLE: !Ref WeatherDynamoTable
           API_ID: !Ref WeatherWsAPI
           API_STAGE: !Ref WsStageName
-          AWS_REGION: !Ref AWS::Region
           
       Policies: 
         - DynamoDBReadPolicy:
             TableName: !Ref WeatherDynamoTable
+        - !Ref WeatherEventWSPushFunctionMayPostEventsToClients
+
       Events:
         DynamoStream:
           Type: DynamoDB
@@ -208,6 +209,19 @@ Resources:
             FilterCriteria:
               Filters:
                 - Pattern: '{ "dynamodb" : { "Keys" : { "PK" : { "S" : [{"prefix": "DeviceId#"}] } } } }'
+
+
+  WeatherEventWSPushFunctionMayPostEventsToClients:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Action: 
+              - execute-api:Invoke
+              - execute-api:ManageConnections
+            Resource: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WeatherWsAPI}/${WsStageName}/POST/@connections/*"
 
   # -----------------
   # Data 

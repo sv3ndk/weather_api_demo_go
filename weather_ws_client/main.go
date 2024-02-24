@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"flag"
+	"io"
 	"log"
-	"time"
 
 	"nhooyr.io/websocket"
 )
@@ -16,22 +16,31 @@ func main() {
 		flag.Usage()
 	}
 
-	log.Println("Querying WS service at ", *apiUrl)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
+	log.Println("Listening to WS service at ", *apiUrl)
+	// ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	ctx := context.Background()
+	// defer cancel()
 
 	c, _, err := websocket.Dial(ctx, *apiUrl, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer c.CloseNow()
+	defer func() {
+		log.Println("closing socket now")
+		c.Close(websocket.StatusNormalClosure, "")
+	}()
 
-	// // err = wsjson.Write(ctx, c, "hi")
-	// // if err != nil {
-	// // 	// ...
-	// // }
-
-	time.Sleep(10 * time.Second)
-
-	c.Close(websocket.StatusNormalClosure, "")
+	for {
+		_, reader, err := c.Reader(ctx)
+		if err != nil {
+			log.Fatal(err)
+		} else {
+			data, err := io.ReadAll(reader)
+			if err != nil {
+				log.Fatal(err)
+			} else {
+				log.Println(string(data))
+			}
+		}
+	}
 }

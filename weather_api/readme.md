@@ -10,20 +10,26 @@ sam deploy --guided
 sam deploy
 ```
 
-Obtain the URL of the public API:
+Obtain the URL of the public REST API:
 
 ```sh
-    aws cloudformation describe-stacks --stack-name weather-api-demo --query 'Stacks[0].Outputs[?OutputKey==`WeatherAPIRestEndpoint`].OutputValue' --output text
+aws cloudformation describe-stacks --stack-name weather-api-demo --query 'Stacks[0].Outputs[?OutputKey==`WeatherAPIRestEndpoint`].OutputValue' --output text
 ```
 
 Obtain the API key id
-    ```sh
+```sh
 # Customer1ApiKeyId or Customer2ApiKeyId here
 aws cloudformation describe-stacks --stack-name weather-api-demo --query 'Stacks[0].Outputs[?OutputKey==`Customer1ApiKeyId`].OutputValue' --output text
 
 
 aws apigateway get-api-key --include-value --api-key <some id> --query "value"
 ```
+
+Obtain the URL of the websocket endpoint:
+```sh
+aws cloudformation describe-stacks --stack-name weather-api-demo --query 'Stacks[0].Outputs[?OutputKey==`WeatherAPIWsEndpoint`].OutputValue' --output text
+```
+
 
 Tail the logs:
 
@@ -40,7 +46,7 @@ Get some weather events (or use the rest client):
 # url, api key: see above
 
 curl \
-    -X GET 'https://...url...v1/weather?device_id=1005&from=2023-02-17T20:13:25%2B0100&to=2025-02-17T20:13:55%2B0100' \
+    -X GET 'https://...httpUrl...v1/weather?device_id=1005&from=2023-02-17T20:13:25%2B0100&to=2025-02-17T20:13:55%2B0100' \
     -H 'X-API-Key: ...api key...'
 ```
 
