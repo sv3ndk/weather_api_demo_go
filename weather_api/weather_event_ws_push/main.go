@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
+	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -49,7 +51,7 @@ func init() {
 }
 
 // queryActiveSessionIds retrieves the list of connection id of currently connected ws clients
-func queryActiveSessionIds() ([]string, error) {
+func queryActiveSessionIds(ctx context.Context) ([]string, error) {
 	expr, err := expression.NewBuilder().
 		WithKeyCondition(
 			expression.Key("PK").Equal(expression.Value("WS_SESSIONS")),
@@ -68,7 +70,7 @@ func queryActiveSessionIds() ([]string, error) {
 		ExpressionAttributeValues: expr.Values(),
 	}
 
-	if queryResult, err := dynamodbClient.Query(context.TODO(), &query); err != nil {
+	if queryResult, err := dynamodbClient.Query(ctx, &query); err != nil {
 		return nil, fmt.Errorf("error while querying DynamodDB: %w", err)
 	} else {
 		connectionIds := []string{}
@@ -86,9 +88,36 @@ func queryActiveSessionIds() ([]string, error) {
 	}
 }
 
+// sendEventsToWsClients tries to forward the specified events to those websocket connection ID
+// via the API gateway. Any error is just ignored
+func sendEventsToWsClients(ctx context.Context, weatherEvents [][]byte, connectionIds []string) {
+	var waiter sync.WaitGroup
+	for _, connectionId := range connectionIds {
+		log.Println("sending records to active ws connection: ", connectionId)
+		for _, event := range weatherEvents {
+			log.Println("sending event", string(event), " to ", connectionId)
+			waiter.Add(1)
+			go func() {
+				postInput := apigatewaymanagementapi.PostToConnectionInput{
+					ConnectionId: &connectionId,
+					Data:         event,
+				}
+				if _, err := apiGWManagementClient.PostToConnection(ctx, &postInput); err != nil {
+					log.Println("failed to send event ", err)
+				}
+				waiter.Done()
+			}()
+		}
+	}
+	waiter.Wait()
+}
+
 func handler(ctx context.Context, event events.DynamoDBEvent) {
 
-	connectionIds, err := queryActiveSessionIds()
+	timeBoxedCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	connectionIds, err := queryActiveSessionIds(timeBoxedCtx)
 	if err != nil {
 		log.Fatal("Could not fetch active ws connections from DB", err)
 	}
@@ -113,21 +142,8 @@ func handler(ctx context.Context, event events.DynamoDBEvent) {
 			}
 		}
 
-		for _, connectionId := range connectionIds {
-			log.Println("sending records to active ws connection: ", connectionId)
-			for _, event := range weatherEvents {
-				log.Println("sending event", string(event), " to ", connectionId)
+		sendEventsToWsClients(timeBoxedCtx, weatherEvents, connectionIds)
 
-				postInput := apigatewaymanagementapi.PostToConnectionInput{
-					ConnectionId: &connectionId,
-					Data:         event,
-				}
-
-				if _, err := apiGWManagementClient.PostToConnection(ctx, &postInput); err != nil {
-					log.Println("failed to send event ", err)
-				}
-			}
-		}
 	} else {
 		log.Println("no WS client connected atm")
 	}

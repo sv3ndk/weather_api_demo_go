@@ -13,7 +13,6 @@
 
 ## TODO (maybe)
 
-* add concurrency to ws feed-back and data generator: insert to DB concurrently with goroutines or step function
 * handleg SIGINT correcty in ws socket client
 * add Webocket security: API key? Or first request a temp token through REST, then pass it in the `connect` ws phase
 * add custom domain name

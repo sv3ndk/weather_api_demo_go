@@ -10,7 +10,7 @@ Parameters:
 
   WsStageName:
     Type: String
-    Default: v3
+    Default: v1
     Description: Websocket stage name
 
 Resources:
@@ -206,6 +206,7 @@ Resources:
           Properties:
             Stream: !GetAtt WeatherDynamoTable.StreamArn
             StartingPosition: TRIM_HORIZON
+            # MaximumBatchingWindowInSeconds: 1
             FilterCriteria:
               Filters:
                 - Pattern: '{ "dynamodb" : { "Keys" : { "PK" : { "S" : [{"prefix": "DeviceId#"}] } } } }'

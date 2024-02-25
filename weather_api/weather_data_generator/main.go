@@ -8,6 +8,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -95,61 +96,91 @@ func randomEvents(deviceId int64) []WeatherEvent {
 	}
 }
 
-// addSample puts one single WeatherEvent in Dynamodb
-func addSample(ctx context.Context, client *dynamodb.Client, event WeatherEvent) error {
-	putItem := dynamodb.PutItemInput{
-		TableName: dynamoTable,
-		Item: map[string]types.AttributeValue{
-			"PK": &types.AttributeValueMemberS{
-				Value: fmt.Sprintf("DeviceId#%d", event.DeviceId),
-			},
-			"SK": &types.AttributeValueMemberS{
-				Value: fmt.Sprintf("Time#%d#Type%s", event.Time.Unix(), event.EventType),
-			},
-			"DeviceId": &types.AttributeValueMemberN{
-				Value: fmt.Sprintf("%d", event.DeviceId),
-			},
-			"EventType": &types.AttributeValueMemberS{
-				Value: event.EventType,
-			},
-			"Value": &types.AttributeValueMemberN{
-				Value: fmt.Sprintf("%f", event.Value),
-			},
-			"Time": &types.AttributeValueMemberN{
-				Value: fmt.Sprintf("%d", event.Time.Unix()),
-			},
-		},
+// addSamples inserts the given weather events into DynamoDB as one single batch
+func addSamples(ctx context.Context, weatherEvents []WeatherEvent) error {
+	log.Println("inserting batch")
+
+	if len(weatherEvents) > 0 && len(weatherEvents) < 26 {
+
+		putRequests := make([]types.WriteRequest, 0, len(weatherEvents))
+
+		for _, weatherEvent := range weatherEvents {
+			putRequest := types.WriteRequest{
+				PutRequest: &types.PutRequest{
+					Item: map[string]types.AttributeValue{
+						"PK": &types.AttributeValueMemberS{
+							Value: fmt.Sprintf("DeviceId#%d", weatherEvent.DeviceId),
+						},
+						"SK": &types.AttributeValueMemberS{
+							Value: fmt.Sprintf("Time#%d#Type%s", weatherEvent.Time.Unix(), weatherEvent.EventType),
+						},
+						"DeviceId": &types.AttributeValueMemberN{
+							Value: fmt.Sprintf("%d", weatherEvent.DeviceId),
+						},
+						"EventType": &types.AttributeValueMemberS{
+							Value: weatherEvent.EventType,
+						},
+						"Value": &types.AttributeValueMemberN{
+							Value: fmt.Sprintf("%f", weatherEvent.Value),
+						},
+						"Time": &types.AttributeValueMemberN{
+							Value: fmt.Sprintf("%d", weatherEvent.Time.Unix()),
+						},
+					},
+				},
+			}
+
+			putRequests = append(putRequests, putRequest)
+
+			input := dynamodb.BatchWriteItemInput{
+				RequestItems: map[string][]types.WriteRequest{
+					*dynamoTable: putRequests,
+				},
+			}
+
+			if _, err := dynamodbClient.BatchWriteItem(ctx, &input); err != nil {
+				return fmt.Errorf("error while inserting events in DyanmoDB %w", err)
+			}
+		}
+	} else {
+		log.Printf("refusing to insert a batch of size %d", len(weatherEvents))
 	}
 
-	if _, err := dynamodbClient.PutItem(ctx, &putItem); err != nil {
-		return fmt.Errorf("error while inserting event %v in DyanmoDB %w", event, err)
-	}
 	return nil
 }
 
-func genData() error {
+// addAllSamples slices the given array into batches of 25 (i.e. the maximum allowed
+// by DynamoDB) nand sends them to addSamples.
+// (in theory we should check if keys overlap, although here we know they never do)
+func addAllSamples(ctx context.Context, weatherEvents []WeatherEvent) {
+	log.Println("sending generated data to DB")
+	var waiter = sync.WaitGroup{}
+	for i := 0; i < len(weatherEvents); i += 25 {
+		fromIdx := i
+		toIdx := min(i+25, len(weatherEvents))
+		waiter.Add(1)
+		go func() {
+			if err := addSamples(ctx, weatherEvents[fromIdx:toIdx]); err != nil {
+				log.Println("failed to insert data in Dynamo", err)
+			}
+			waiter.Done()
+		}()
+	}
+	waiter.Wait()
+}
+
+func handler(ctx context.Context, request events.EventBridgeEvent) {
 	log.Println("generating random weather event")
 
-	events := []WeatherEvent{}
+	events := make([]WeatherEvent, 0, 50)
 	for i := range 10 {
 		deviceId := int64(1000 + i)
 		events = append(events, randomEvents(deviceId)...)
 	}
 
-	for _, weatherEvent := range events {
-		if err := addSample(ctx, dynamodbClient, weatherEvent); err != nil {
-			return err
-		}
-	}
+	addAllSamples(ctx, events)
 
 	log.Println("done")
-	return nil
-}
-
-func handler(ctx context.Context, request events.EventBridgeEvent) {
-	if err := genData(); err != nil {
-		log.Fatal(err)
-	}
 }
 
 func main() {

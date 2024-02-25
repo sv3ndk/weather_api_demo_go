@@ -1,5 +1,4 @@
-// Lambda keeping track of the connection id of the currently connected
-// websocket client.
+// Lambda keeping track of the connection id of the currently connected websocket clients.
 package main
 
 import (
@@ -70,7 +69,6 @@ func removeConnectionID(ctx context.Context, connectionId string) error {
 		return fmt.Errorf("error while removing sessiongId %s: %w", connectionId, err)
 	}
 	return nil
-
 }
 
 func serverError(msg string) events.APIGatewayProxyResponse {
