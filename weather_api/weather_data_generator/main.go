@@ -129,19 +129,19 @@ func addSamples(ctx context.Context, weatherEvents []WeatherEvent) error {
 					},
 				},
 			}
-
 			putRequests = append(putRequests, putRequest)
-
-			input := dynamodb.BatchWriteItemInput{
-				RequestItems: map[string][]types.WriteRequest{
-					*dynamoTable: putRequests,
-				},
-			}
-
-			if _, err := dynamodbClient.BatchWriteItem(ctx, &input); err != nil {
-				return fmt.Errorf("error while inserting events in DyanmoDB %w", err)
-			}
 		}
+
+		input := dynamodb.BatchWriteItemInput{
+			RequestItems: map[string][]types.WriteRequest{
+				*dynamoTable: putRequests,
+			},
+		}
+
+		if _, err := dynamodbClient.BatchWriteItem(ctx, &input); err != nil {
+			return fmt.Errorf("error while inserting events in DyanmoDB %w", err)
+		}
+
 	} else {
 		log.Printf("refusing to insert a batch of size %d", len(weatherEvents))
 	}
@@ -150,7 +150,7 @@ func addSamples(ctx context.Context, weatherEvents []WeatherEvent) error {
 }
 
 // addAllSamples slices the given array into batches of 25 (i.e. the maximum allowed
-// by DynamoDB) nand sends them to addSamples.
+// by DynamoDB) and sends them to addSamples.
 // (in theory we should check if keys overlap, although here we know they never do)
 func addAllSamples(ctx context.Context, weatherEvents []WeatherEvent) {
 	log.Println("sending generated data to DB")
@@ -171,15 +171,12 @@ func addAllSamples(ctx context.Context, weatherEvents []WeatherEvent) {
 
 func handler(ctx context.Context, request events.EventBridgeEvent) {
 	log.Println("generating random weather event")
-
 	events := make([]WeatherEvent, 0, 50)
 	for i := range 10 {
 		deviceId := int64(1000 + i)
 		events = append(events, randomEvents(deviceId)...)
 	}
-
 	addAllSamples(ctx, events)
-
 	log.Println("done")
 }
 
