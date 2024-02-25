@@ -1,3 +1,4 @@
+// Lambda serving the REST GET requests received from the API Gateway
 package main
 
 import (
@@ -31,7 +32,6 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	dynamoClient = dynamodb.NewFromConfig(awsCfg)
 }
 
@@ -48,8 +48,8 @@ type WeatherEvent struct {
 	Value     float64
 }
 
-// expects an (encoded) query string like ?device_id=1&from=2024-02-17T20:13:25+0100&to=2024-02-17T20:13:55+0100'
-// ('+' needs to be encoded into '%2B' in the URL)
+// parseParams parses a URL encoded query string
+// example input: '?device_id=1&from=2024-02-17T20:13:25+0100&to=2024-02-17T20:13:55+0100'
 func parseParams(params map[string]string) (InputParams, error) {
 	deviceIdStr, ok1 := params["device_id"]
 	fromTimeIso, ok2 := params["from"]
@@ -121,7 +121,13 @@ func queryDb(inputParams InputParams) ([]WeatherEvent, error) {
 	return events, nil
 }
 
-// cf https://github.com/aws/aws-lambda-go/blob/main/events/README_ApiGatewayEvent.md
+func serverSideError() events.APIGatewayProxyResponse {
+	return events.APIGatewayProxyResponse{
+		Body:       "failed to fetch event from db",
+		StatusCode: 500,
+	}
+}
+
 func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	inputParams, err := parseParams(request.QueryStringParameters)
 	if err != nil {
@@ -135,24 +141,15 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	weatherEvents, err := queryDb(inputParams)
 	if err != nil {
 		log.Println(err)
-		return events.APIGatewayProxyResponse{
-			Body:       err.Error(),
-			StatusCode: 500,
-		}, nil
+		return serverSideError(), nil
 	}
-	log.Printf("found %d events", len(weatherEvents))
-
-	jsonBytes, err := json.Marshal(weatherEvents)
-	if err != nil {
-		log.Println(err)
-		return events.APIGatewayProxyResponse{
-			Body:       err.Error(),
-			StatusCode: 500,
-		}, nil
-	}
+	log.Printf("returning %d events", len(weatherEvents))
 
 	var body string
-	if jsonBytes == nil {
+	if jsonBytes, err := json.Marshal(weatherEvents); err != nil {
+		log.Println(err)
+		return serverSideError(), nil
+	} else if jsonBytes == nil {
 		body = "{}"
 	} else {
 		body = string(jsonBytes)

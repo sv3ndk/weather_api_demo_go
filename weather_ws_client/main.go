@@ -1,3 +1,4 @@
+// CLI app connecting to the websocket endpoint to fetch weather events and print them
 package main
 
 import (
@@ -11,15 +12,12 @@ import (
 
 func main() {
 	apiUrl := flag.String("url", "", "URL of the REST endpoint")
-	flag.Parse()
-	if len(*apiUrl) == 0 {
+	if flag.Parse(); len(*apiUrl) == 0 {
 		flag.Usage()
 	}
 
 	log.Println("Listening to WS service at ", *apiUrl)
-	// ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	ctx := context.Background()
-	// defer cancel()
 
 	c, _, err := websocket.Dial(ctx, *apiUrl, nil)
 	if err != nil {

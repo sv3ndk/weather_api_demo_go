@@ -1,3 +1,5 @@
+// Lambda writing random weather events to Dynamodb.
+// Meant to be triggered every minute by an EventBridge scheduler.
 package main
 
 import (
@@ -82,6 +84,7 @@ func randomWindDirectionEvent(deviceId int64) WeatherEvent {
 	}
 }
 
+// randomEvents creates one random weather event of each type for the given deviceID
 func randomEvents(deviceId int64) []WeatherEvent {
 	return []WeatherEvent{
 		randomPressureEvent(deviceId),
@@ -92,44 +95,35 @@ func randomEvents(deviceId int64) []WeatherEvent {
 	}
 }
 
+// addSample puts one single WeatherEvent in Dynamodb
 func addSample(ctx context.Context, client *dynamodb.Client, event WeatherEvent) error {
-	// There is also attributevalue.MarshalMap(event) in aws-sdk-go-v2/feature/dynamodb/attributevalue but
-	// which reduce the boiler plate, but needs to be completed with "PK", "SK" and potentially
-	// adjusted for any DynamoDB expression attribute name
-	asMap := map[string]types.AttributeValue{
-		// we need to pass a pointer here since isAttributeValue() is attached to a pointer receiver
-		"PK": &types.AttributeValueMemberS{
-			Value: fmt.Sprintf("DeviceId#%d", event.DeviceId),
-		},
-		"SK": &types.AttributeValueMemberS{
-			// considering there can be maximum one event of any type for a given device at any timestamp
-			Value: fmt.Sprintf("Time#%d#Type%s", event.Time.Unix(), event.EventType),
-		},
-		"DeviceId": &types.AttributeValueMemberN{
-			Value: fmt.Sprintf("%d", event.DeviceId),
-		},
-		"EventType": &types.AttributeValueMemberS{
-			Value: event.EventType,
-		},
-		"Value": &types.AttributeValueMemberN{
-			Value: fmt.Sprintf("%f", event.Value),
-		},
-		"Time": &types.AttributeValueMemberN{
-			Value: fmt.Sprintf("%d", event.Time.Unix()),
+	putItem := dynamodb.PutItemInput{
+		TableName: dynamoTable,
+		Item: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{
+				Value: fmt.Sprintf("DeviceId#%d", event.DeviceId),
+			},
+			"SK": &types.AttributeValueMemberS{
+				Value: fmt.Sprintf("Time#%d#Type%s", event.Time.Unix(), event.EventType),
+			},
+			"DeviceId": &types.AttributeValueMemberN{
+				Value: fmt.Sprintf("%d", event.DeviceId),
+			},
+			"EventType": &types.AttributeValueMemberS{
+				Value: event.EventType,
+			},
+			"Value": &types.AttributeValueMemberN{
+				Value: fmt.Sprintf("%f", event.Value),
+			},
+			"Time": &types.AttributeValueMemberN{
+				Value: fmt.Sprintf("%d", event.Time.Unix()),
+			},
 		},
 	}
 
-	_, err := client.PutItem(
-		ctx,
-		&dynamodb.PutItemInput{
-			Item:      asMap,
-			TableName: dynamoTable,
-		},
-	)
-	if err != nil {
+	if _, err := dynamodbClient.PutItem(ctx, &putItem); err != nil {
 		return fmt.Errorf("error while inserting event %v in DyanmoDB %w", event, err)
 	}
-
 	return nil
 }
 
@@ -143,8 +137,7 @@ func genData() error {
 	}
 
 	for _, weatherEvent := range events {
-		err := addSample(ctx, dynamodbClient, weatherEvent)
-		if err != nil {
+		if err := addSample(ctx, dynamodbClient, weatherEvent); err != nil {
 			return err
 		}
 	}
@@ -153,10 +146,8 @@ func genData() error {
 	return nil
 }
 
-// cf https://github.com/aws/aws-lambda-go/blob/main/events/README_EventBridge_Events.md
 func handler(ctx context.Context, request events.EventBridgeEvent) {
-	err := genData()
-	if err != nil {
+	if err := genData(); err != nil {
 		log.Fatal(err)
 	}
 }
