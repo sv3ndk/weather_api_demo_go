@@ -88,7 +88,7 @@ Resources:
       Handler: bootstrap
       Runtime: provided.al2023
       Architectures:
-        - x86_64
+        - arm64
       Events:
         CatchAll:
           Type: Api 
@@ -124,7 +124,7 @@ Resources:
       Handler: bootstrap
       Runtime: provided.al2023
       Architectures:
-        - x86_64
+        - arm64
       Environment: 
         Variables:
           DYNAMO_TABLE: !Ref WeatherDynamoTable
@@ -188,7 +188,7 @@ Resources:
       Handler: bootstrap
       Runtime: provided.al2023
       Architectures:
-        - x86_64
+        - arm64
       Environment: 
         Variables:
           DYNAMO_TABLE: !Ref WeatherDynamoTable
@@ -256,7 +256,7 @@ Resources:
       Handler: bootstrap
       Runtime: provided.al2023
       Architectures:
-        - x86_64
+        - arm64
       Events:
         Clock:
           Type:  ScheduleV2
