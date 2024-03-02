@@ -1,6 +1,18 @@
 # Weather API
 
-## How to run
+## Deployment
+
+### Custom domain pre-requisite 
+
+Both the REST and Websock endpoint are associated with a public DNS name, which requires some manual additional setup
+(or just to comment out the domain and mapping config in the SAM template...)
+
+* register a domain name
+* create a [certificate for `*.weather-api-demo.poc.domain-name` in ACM](https://docs.aws.amazon.com/acm/latest/userguide/gs-acm-request-public.html)
+
+=> use the ARN of the certificate as `DomainCertificateArn` input parameter of the SAM template.
+
+### Stack deployment
 
 Build and deploy the SAM application:
 
@@ -14,11 +26,48 @@ sam deploy --guided
 sam deploy
 ```
 
-Obtain the URL of the public REST API:
+### DNS registration
+
+The stack contains 2 API Gateway custom domain mappings that needs to be associated with the desired DNS name of the services.
 
 ```sh
-aws cloudformation describe-stacks --stack-name weather-api-demo --query 'Stacks[0].Outputs[?OutputKey==`WeatherAPIRestEndpoint`].OutputValue' --output text
+# AWS mapping domain name for the rest endpoint:
+aws cloudformation describe-stacks --stack-name weather-api-demo --query 'Stacks[0].Outputs[?OutputKey==`WeatherRestRegionalAwsDomain`].OutputValue' --output text
+
+# public DNS name of the rest endpoint
+aws cloudformation describe-stacks --stack-name weather-api-demo --query 'Stacks[0].Outputs[?OutputKey==`WeatherRestPublicDomain`].OutputValue' --output text
 ```
+
+Add a DNS CNAME that let the public DNS name resolve to the AWS mapping name
+
+```sh
+# AWS mapping domain name for the websocket endpoint:
+aws cloudformation describe-stacks --stack-name weather-api-demo --query 'Stacks[0].Outputs[?OutputKey==`WeatherWsRegionalAwsDomain`].OutputValue' --output text
+
+# public DNS name of the websocket endpoint
+aws cloudformation describe-stacks --stack-name weather-api-demo --query 'Stacks[0].Outputs[?OutputKey==`WeatherWsPublicDomain`].OutputValue' --output text
+```
+
+Add a DNS CNAME that let the public DNS name resolve to the AWS mapping name
+
+```
+# mapping domain name for the websocket endpoint:
+aws cloudformation describe-stacks --stack-name weather-api-demo --query 'Stacks[0].Outputs[?OutputKey==`WeatherWsRegionalAwsDomain`].OutputValue' --output text
+```
+
+### Logs
+
+```sh
+sam logs -n WeatherReadFrontendFunction --stack-name weather-api-demo --tail
+sam logs -n WeatherEventWSPushFunction --stack-name weather-api-demo --tail
+sam logs -n WeatherDataGeneratorFunction --stack-name weather-api-demo --tail
+```
+
+## How to invoke
+
+### Obtain the REST endpoints and credentials
+
+Use the puclic DNS name of the REST service (see above).
 
 Obtain one of the API key id:
 ```sh
@@ -28,23 +77,20 @@ aws cloudformation describe-stacks --stack-name weather-api-demo --query 'Stacks
 aws apigateway get-api-key --include-value --api-key <some id> --query "value"
 ```
 
-Obtain the URL of the websocket endpoint:
-```sh
-aws cloudformation describe-stacks --stack-name weather-api-demo --query 'Stacks[0].Outputs[?OutputKey==`WeatherAPIWsEndpoint`].OutputValue' --output text
-```
+### Obtain the Web endpoints
 
-Tail the logs:
+Use the puclic DNS name of the websocket service (see above).
 
-```sh
-sam logs -n WeatherReadFrontendFunction --stack-name weather-api-demo --tail
-sam logs -n WeatherEventWSPushFunction --stack-name weather-api-demo --tail
-sam logs -n WeatherDataGeneratorFunction --stack-name weather-api-demo --tail
-```
+### Invoke the service
 
-Get some weather events (or use the client projects to query the REST or websocket endpoint):
+See the [REST client](../weather_rest_client/readme.md) 
+and the [websocket client](../weather_ws_client/readme.md) 
+to query each service.
+
+For the REST service, we can simply use `curl` :
 
 ```sh
-curl \
-    -X GET 'https://<httpUrl>?device_id=1005&from=2023-02-17T20:13:25%2B0100&to=2025-02-17T20:13:55%2B0100' \
+curl GET \
+    'https://rest.weather-api-demo.poc.svend.xyz/weather?device_id=1005&from=2023-02-17T20:13:25%2B0100&to=2025-02-17T20:13:55%2B0100' \
     -H 'X-API-Key: <api key>'
 ```

@@ -98,6 +98,7 @@ func sendEventsToWsClients(ctx context.Context, weatherEvents [][]byte, connecti
 			log.Println("sending event", string(event), " to ", connectionId)
 			waiter.Add(1)
 			go func() {
+				defer waiter.Done()
 				postInput := apigatewaymanagementapi.PostToConnectionInput{
 					ConnectionId: &connectionId,
 					Data:         event,
@@ -105,7 +106,7 @@ func sendEventsToWsClients(ctx context.Context, weatherEvents [][]byte, connecti
 				if _, err := apiGWManagementClient.PostToConnection(ctx, &postInput); err != nil {
 					log.Println("failed to send event ", err)
 				}
-				waiter.Done()
+
 			}()
 		}
 	}

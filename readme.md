@@ -10,12 +10,12 @@
   * the [on-connect lambda](weather_api/weather_ws_on_connection_event/main.go) keeps track of the currently connected websocket clients
   * the [ws-push lambda](weather_api/weather_event_ws_push/main.go) is notified when events are added to DynamoDB and forwards them to all currently connected websocket clients
   * a [CLI websocket client](weather_ws_client/readme.md) streams weather events from the websocket endpoint and prints them
+- both the REST and websocket endpoint are exposed on a custom DNS name
 
 ## TODO (maybe)
 
 * handleg SIGINT correcty in ws socket client
 * add Webocket security: API key? Or first request a temp token through REST, then pass it in the `connect` ws phase
-* add custom domain name
 * setup mutual TLS for the REST endpoint (cf https://docs.aws.amazon.com/apigateway/latest/developerguide/rest-api-mutual-tls.html
    and https://venilnoronha.io/a-step-by-step-guide-to-mtls-in-go )
 * add OpenAPI spec to REST endpoint

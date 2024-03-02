@@ -50,6 +50,7 @@ func (c WeatherClient) QueryEvents(deviceId int, fromTime time.Time, toTime time
 	req.Header["X-API-Key"] = []string{c.apiKey}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		log.Panicln(err)
 		return nil, fmt.Errorf("could not query API: %w", err)
 	}
 	defer resp.Body.Close()

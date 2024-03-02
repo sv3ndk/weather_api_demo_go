@@ -160,10 +160,10 @@ func addAllSamples(ctx context.Context, weatherEvents []WeatherEvent) {
 		toIdx := min(i+25, len(weatherEvents))
 		waiter.Add(1)
 		go func() {
+			defer waiter.Done()
 			if err := addSamples(ctx, weatherEvents[fromIdx:toIdx]); err != nil {
 				log.Println("failed to insert data in Dynamo", err)
 			}
-			waiter.Done()
 		}()
 	}
 	waiter.Wait()

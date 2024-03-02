@@ -4,16 +4,29 @@ Description: weather_api_demo
 
 Parameters:
   RestStageName:
+    Description: REST API stage name
     Type: String
     Default: v1
-    Description: REST API stage name
 
   WsStageName:
+    Description: Websocket stage name
     Type: String
     Default: v1
-    Description: Websocket stage name
+
+  ServiceCustomDomain:
+    Description: domain (or sub-domain) associated with the service
+    Type: String
+    Default: weather-api-demo.poc.svend.xyz
+
+  DomainCertificateArn:
+    Description: ARN of the certificate in ACM associated with the public domain for this API
+    Type: String
+    Default: arn:aws:acm:eu-central-1:739786912520:certificate/9470cb02-9944-4d59-b3f0-33ef3881997b
 
 Resources:
+
+  # Common public domain name used for both the REST and
+
   # -----------------------
   # Request / Response API
 
@@ -21,10 +34,32 @@ Resources:
     Type: AWS::Serverless::Api
     Properties:
       Description: REST API providing read access to weather events
-      StageName: !Sub '${RestStageName}'
+      StageName: !Ref RestStageName
+      DisableExecuteApiEndpoint: True           # disabled to force clients to use the public DNS name
       ApiKeySourceType: HEADER
       Auth:
         ApiKeyRequired: true    # requiring an API key for all methods
+
+
+  # this requires a DNS entry to exist for this domain (see readme, and output variable)
+  WeatherReadFrontendDomain:  
+    Type: AWS::ApiGatewayV2::DomainName
+    Properties:
+      DomainName: !Sub "rest.${ServiceCustomDomain}"
+      DomainNameConfigurations: 
+        - CertificateArn: !Ref DomainCertificateArn
+          EndpointType: Regional
+          SecurityPolicy: TLS_1_2
+
+  # this requires a certificate to exist in ACM (see readme, and input variable)
+  WeatherReadFrontendMapping:
+    Type: AWS::ApiGatewayV2::ApiMapping
+    DependsOn:
+      - WeatherReadFrontendDomain
+    Properties:
+      DomainName: !Sub "rest.${ServiceCustomDomain}"
+      ApiId: !Ref WeatherReadFrontendApi
+      Stage: !Ref RestStageName
 
 
   WeatherReadFrontendBasicUsagePlan:
@@ -35,7 +70,7 @@ Resources:
       Description: Basic usage plan for the REST API
       ApiStages:
         - ApiId: !Ref WeatherReadFrontendApi
-          Stage: !Sub '${RestStageName}'
+          Stage: !Ref RestStageName
           Throttle:
             "/weather/GET": 
               RateLimit: 50.0   
@@ -103,6 +138,10 @@ Resources:
         - DynamoDBReadPolicy:
             TableName: !Ref WeatherDynamoTable
 
+
+
+
+
   # -----------------
   # Real time API
 
@@ -112,8 +151,31 @@ Resources:
       Name: WeatherWsAPI
       # ApiKeySelectionExpression: "$request.header.x-api-key"
       Description: WSS API for real time weather events
+      DisableExecuteApiEndpoint: True           # disabled to force clients to use the public DNS name
       ProtocolType: WEBSOCKET
       RouteSelectionExpression: "$request.body.action"
+
+
+  # this requires a DNS entry to exist for this domain (see readme, and output variable)
+  WeatherWsDomain:  
+    Type: AWS::ApiGatewayV2::DomainName
+    Properties:
+      DomainName: !Sub "ws.${ServiceCustomDomain}"
+      DomainNameConfigurations: 
+        - CertificateArn: !Ref DomainCertificateArn
+          EndpointType: Regional
+          SecurityPolicy: TLS_1_2
+
+  # this requires a certificate to exist in ACM (see readme, and input variable)
+  WeatherWsMapping:
+    Type: AWS::ApiGatewayV2::ApiMapping
+    DependsOn:
+      - WeatherWsDomain
+    Properties:
+      DomainName: !Sub "ws.${ServiceCustomDomain}"
+      ApiId: !Ref WeatherWsAPI
+      Stage: !Ref WsStageName
+
 
   WeatherWsOnConnectionEventFunction:
     Type: AWS::Serverless::Function 
@@ -280,9 +342,17 @@ Outputs:
     Description: DynamoDB table ARN
     Value: !GetAtt WeatherDynamoTable.Arn
 
-  WeatherAPIRestEndpoint:
-    Description: "REST API endpoint "
-    Value: !Sub "https://${WeatherReadFrontendApi}.execute-api.${AWS::Region}.amazonaws.com/${RestStageName}/weather/"
+  # WeatherAPIRestEndpoint:
+  #   Description: "REST API endpoint "
+  #   Value: !Sub "https://${WeatherReadFrontendApi}.execute-api.${AWS::Region}.amazonaws.com/${RestStageName}/weather/"
+
+  WeatherRestRegionalAwsDomain:
+    Description: "AWS endpoint of the REST mapping, to be registered in in the DNS table"
+    Value: !GetAtt WeatherReadFrontendDomain.RegionalDomainName
+
+  WeatherRestPublicDomain:
+    Description: "Public custom domain of the REST service, to be registered in in the DNS table and used to send request"
+    Value: !Sub "rest.${ServiceCustomDomain}"
 
   Customer1ApiKeyId:
     Description: "ID of the API key 1 to be used by the client to the REST API"
@@ -292,6 +362,14 @@ Outputs:
     Description: "ID of the API key 2 to be used by the client to the REST API"
     Value: !Ref WeatherReadFrontendApiKeyCustomer2
 
-  WeatherAPIWsEndpoint:
-    Description: "Websocket API endpoint"
-    Value: !Sub "${WeatherWsAPI.ApiEndpoint}/${WsStageName}"
+  # WeatherAPIWsEndpoint:
+  #   Description: "Websocket API endpoint"
+  #   Value: !Sub "${WeatherWsAPI.ApiEndpoint}/${WsStageName}"
+
+  WeatherWsRegionalAwsDomain:
+    Description: "AWS endpoint of the Websocke mapping, to be registered in in the DNS table"
+    Value: !GetAtt WeatherWsDomain.RegionalDomainName
+
+  WeatherWsPublicDomain:
+    Description: "Public endpoint of the websocket service, to be registered in in the DNS table and used to create ws connections"
+    Value: !Sub "ws.${ServiceCustomDomain}"

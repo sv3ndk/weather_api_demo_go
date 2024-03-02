@@ -111,7 +111,7 @@ func queryDb(inputParams InputParams) ([]WeatherEvent, error) {
 		return nil, fmt.Errorf("error while querying DynamodDB: %w", err)
 	}
 
-	events := []WeatherEvent{}
+	events := make([]WeatherEvent, 0, len(queryResult.Items))
 	for _, rawEvent := range queryResult.Items {
 		event := WeatherEvent{}
 		attributevalue.UnmarshalMap(rawEvent, &event)
