@@ -2,15 +2,15 @@
 
 ## Deployment
 
-### Custom domain pre-requisite 
+### Custom domain pre-requisites
 
-Both the REST and Websock endpoint are associated with a public DNS name, which requires some manual additional setup
+Both the REST and Websocek endpoints are associated with a public DNS subdomain name, which requires some manual additional setup
 (or just to comment out the domain and mapping config in the SAM template...)
 
 * register a domain name
 * create a [certificate for `*.weather-api-demo.poc.domain-name` in ACM](https://docs.aws.amazon.com/acm/latest/userguide/gs-acm-request-public.html)
 
-=> use the ARN of the certificate as `DomainCertificateArn` input parameter of the SAM template.
+=> use the ARN of that certificate as `DomainCertificateArn` input parameter of the SAM template.
 
 ### Stack deployment
 

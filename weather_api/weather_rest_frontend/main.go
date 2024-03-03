@@ -35,6 +35,39 @@ func init() {
 	dynamoClient = dynamodb.NewFromConfig(awsCfg)
 }
 
+func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	inputParams, err := parseParams(request.QueryStringParameters)
+	if err != nil {
+		log.Println(err)
+		return events.APIGatewayProxyResponse{
+			Body:       err.Error(),
+			StatusCode: 400,
+		}, nil
+	}
+
+	weatherEvents, err := queryDb(inputParams)
+	if err != nil {
+		log.Println(err)
+		return serverSideError(), nil
+	}
+	log.Printf("returning %d events", len(weatherEvents))
+
+	var body string
+	if jsonBytes, err := json.Marshal(weatherEvents); err != nil {
+		log.Println(err)
+		return serverSideError(), nil
+	} else if jsonBytes == nil {
+		body = "{}"
+	} else {
+		body = string(jsonBytes)
+	}
+
+	return events.APIGatewayProxyResponse{
+		Body:       body,
+		StatusCode: 200,
+	}, nil
+}
+
 type InputParams struct {
 	DeviceId int64
 	FromTime time.Time
@@ -126,39 +159,6 @@ func serverSideError() events.APIGatewayProxyResponse {
 		Body:       "failed to fetch event from db",
 		StatusCode: 500,
 	}
-}
-
-func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	inputParams, err := parseParams(request.QueryStringParameters)
-	if err != nil {
-		log.Println(err)
-		return events.APIGatewayProxyResponse{
-			Body:       err.Error(),
-			StatusCode: 400,
-		}, nil
-	}
-
-	weatherEvents, err := queryDb(inputParams)
-	if err != nil {
-		log.Println(err)
-		return serverSideError(), nil
-	}
-	log.Printf("returning %d events", len(weatherEvents))
-
-	var body string
-	if jsonBytes, err := json.Marshal(weatherEvents); err != nil {
-		log.Println(err)
-		return serverSideError(), nil
-	} else if jsonBytes == nil {
-		body = "{}"
-	} else {
-		body = string(jsonBytes)
-	}
-
-	return events.APIGatewayProxyResponse{
-		Body:       body,
-		StatusCode: 200,
-	}, nil
 }
 
 func main() {

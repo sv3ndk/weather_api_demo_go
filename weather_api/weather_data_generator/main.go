@@ -40,6 +40,28 @@ type WeatherEvent struct {
 	Value     float64
 }
 
+func handler(ctx context.Context, request events.EventBridgeEvent) {
+	log.Println("generating random weather event")
+	events := make([]WeatherEvent, 0, 50)
+	for i := range 10 {
+		deviceId := int64(1000 + i)
+		events = append(events, randomEvents(deviceId)...)
+	}
+	addAllSamples(ctx, events)
+	log.Println("done")
+}
+
+// randomEvents creates one random weather event of each type for the given deviceID
+func randomEvents(deviceId int64) []WeatherEvent {
+	return []WeatherEvent{
+		randomPressureEvent(deviceId),
+		randomTemperatureEvent(deviceId),
+		randomHumidityEvent(deviceId),
+		randomWindSpeedEvent(deviceId),
+		randomWindDirectionEvent(deviceId),
+	}
+}
+
 func randomPressureEvent(deviceId int64) WeatherEvent {
 	return WeatherEvent{
 		DeviceId:  deviceId,
@@ -85,15 +107,24 @@ func randomWindDirectionEvent(deviceId int64) WeatherEvent {
 	}
 }
 
-// randomEvents creates one random weather event of each type for the given deviceID
-func randomEvents(deviceId int64) []WeatherEvent {
-	return []WeatherEvent{
-		randomPressureEvent(deviceId),
-		randomTemperatureEvent(deviceId),
-		randomHumidityEvent(deviceId),
-		randomWindSpeedEvent(deviceId),
-		randomWindDirectionEvent(deviceId),
+// addAllSamples slices the given array into batches of 25 (i.e. the maximum allowed
+// by DynamoDB) and sends them to addSamples.
+// (in theory we should check if keys overlap, although here we know they never do)
+func addAllSamples(ctx context.Context, weatherEvents []WeatherEvent) {
+	log.Println("sending generated data to DB")
+	var waiter = sync.WaitGroup{}
+	for i := 0; i < len(weatherEvents); i += 25 {
+		fromIdx := i
+		toIdx := min(i+25, len(weatherEvents))
+		waiter.Add(1)
+		go func() {
+			defer waiter.Done()
+			if err := addSamples(ctx, weatherEvents[fromIdx:toIdx]); err != nil {
+				log.Println("failed to insert data in Dynamo", err)
+			}
+		}()
 	}
+	waiter.Wait()
 }
 
 // addSamples inserts the given weather events into DynamoDB as one single batch
@@ -147,37 +178,6 @@ func addSamples(ctx context.Context, weatherEvents []WeatherEvent) error {
 	}
 
 	return nil
-}
-
-// addAllSamples slices the given array into batches of 25 (i.e. the maximum allowed
-// by DynamoDB) and sends them to addSamples.
-// (in theory we should check if keys overlap, although here we know they never do)
-func addAllSamples(ctx context.Context, weatherEvents []WeatherEvent) {
-	log.Println("sending generated data to DB")
-	var waiter = sync.WaitGroup{}
-	for i := 0; i < len(weatherEvents); i += 25 {
-		fromIdx := i
-		toIdx := min(i+25, len(weatherEvents))
-		waiter.Add(1)
-		go func() {
-			defer waiter.Done()
-			if err := addSamples(ctx, weatherEvents[fromIdx:toIdx]); err != nil {
-				log.Println("failed to insert data in Dynamo", err)
-			}
-		}()
-	}
-	waiter.Wait()
-}
-
-func handler(ctx context.Context, request events.EventBridgeEvent) {
-	log.Println("generating random weather event")
-	events := make([]WeatherEvent, 0, 50)
-	for i := range 10 {
-		deviceId := int64(1000 + i)
-		events = append(events, randomEvents(deviceId)...)
-	}
-	addAllSamples(ctx, events)
-	log.Println("done")
 }
 
 func main() {

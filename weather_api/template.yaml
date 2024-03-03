@@ -343,7 +343,7 @@ Outputs:
     Value: !GetAtt WeatherDynamoTable.Arn
 
   # WeatherAPIRestEndpoint:
-  #   Description: "REST API endpoint "
+  #   Description: "REST API endpoint - DISABLED to force usage of custom subdomain name"
   #   Value: !Sub "https://${WeatherReadFrontendApi}.execute-api.${AWS::Region}.amazonaws.com/${RestStageName}/weather/"
 
   WeatherRestRegionalAwsDomain:
@@ -363,11 +363,11 @@ Outputs:
     Value: !Ref WeatherReadFrontendApiKeyCustomer2
 
   # WeatherAPIWsEndpoint:
-  #   Description: "Websocket API endpoint"
+  #   Description: "Websocket API endpoint - DISABLED to force usage of custom subdomain name"
   #   Value: !Sub "${WeatherWsAPI.ApiEndpoint}/${WsStageName}"
 
   WeatherWsRegionalAwsDomain:
-    Description: "AWS endpoint of the Websocke mapping, to be registered in in the DNS table"
+    Description: "AWS endpoint of the Websocket mapping, to be registered in in the DNS table"
     Value: !GetAtt WeatherWsDomain.RegionalDomainName
 
   WeatherWsPublicDomain:

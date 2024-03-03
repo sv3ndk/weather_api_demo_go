@@ -30,6 +30,33 @@ func init() {
 	dynamodbClient = dynamodb.NewFromConfig(sdkConfig)
 }
 
+// handleRequest is triggered by the API Gateway any time a ws client connects or disconnects
+func handleRequest(ctx context.Context, request events.APIGatewayWebsocketProxyRequest) (events.APIGatewayProxyResponse, error) {
+
+	if request.RequestContext.RouteKey == "$connect" {
+		log.Printf("new connection with id %s\n", request.RequestContext.ConnectionID)
+		if err := storeConnectionID(ctx, request.RequestContext.ConnectionID); err != nil {
+			log.Println(err)
+			return serverError("could not persist connection id"), err
+		}
+	} else if request.RequestContext.RouteKey == "$disconnect" {
+		log.Printf("connection id %s is now stopped \n", request.RequestContext.ConnectionID)
+		if err := removeConnectionID(ctx, request.RequestContext.ConnectionID); err != nil {
+			log.Println(err)
+			return serverError("could not clean up connection id"), err
+		}
+	} else {
+		log.Println("unexpected route key", request.RequestContext.RouteKey)
+		return serverError(""), nil
+	}
+
+	return events.APIGatewayProxyResponse{
+			Body:       "",
+			StatusCode: 200,
+		},
+		nil
+}
+
 func storeConnectionID(ctx context.Context, connectionId string) error {
 	putItem := dynamodb.PutItemInput{
 		TableName: dynamoTable,
@@ -76,33 +103,6 @@ func serverError(msg string) events.APIGatewayProxyResponse {
 		Body:       msg,
 		StatusCode: 500,
 	}
-}
-
-// handleRequest is triggered by the API Gateway any time a ws client connects or disconnects
-func handleRequest(ctx context.Context, request events.APIGatewayWebsocketProxyRequest) (events.APIGatewayProxyResponse, error) {
-
-	if request.RequestContext.RouteKey == "$connect" {
-		log.Printf("new connection with id %s\n", request.RequestContext.ConnectionID)
-		if err := storeConnectionID(ctx, request.RequestContext.ConnectionID); err != nil {
-			log.Println(err)
-			return serverError("could not persist connection id"), err
-		}
-	} else if request.RequestContext.RouteKey == "$disconnect" {
-		log.Printf("connection id %s is now stopped \n", request.RequestContext.ConnectionID)
-		if err := removeConnectionID(ctx, request.RequestContext.ConnectionID); err != nil {
-			log.Println(err)
-			return serverError("could not clean up connection id"), err
-		}
-	} else {
-		log.Println("unexpected route key", request.RequestContext.RouteKey)
-		return serverError(""), nil
-	}
-
-	return events.APIGatewayProxyResponse{
-			Body:       "",
-			StatusCode: 200,
-		},
-		nil
 }
 
 func main() {

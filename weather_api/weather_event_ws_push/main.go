@@ -50,6 +50,43 @@ func init() {
 	)
 }
 
+func handler(ctx context.Context, event events.DynamoDBEvent) {
+
+	timeBoxedCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	connectionIds, err := queryActiveSessionIds(timeBoxedCtx)
+	if err != nil {
+		log.Fatal("Could not fetch active ws connections from DB", err)
+	}
+
+	if len(connectionIds) > 0 {
+		weatherEvents := [][]byte{}
+		for _, record := range event.Records {
+			cleanEvent := map[string]any{}
+			for k, v := range record.Change.NewImage {
+				if k != "PK" && k != "SK" {
+					if v.DataType() == events.DataTypeString {
+						cleanEvent[k] = v.String()
+					} else if v.DataType() == events.DataTypeNumber {
+						cleanEvent[k] = v.Number()
+					}
+				}
+			}
+			if eventBytes, err := json.Marshal(cleanEvent); err != nil {
+				log.Println("failed to process DynamoDB event", err)
+			} else {
+				weatherEvents = append(weatherEvents, eventBytes)
+			}
+		}
+
+		sendEventsToWsClients(timeBoxedCtx, weatherEvents, connectionIds)
+
+	} else {
+		log.Println("no WS client connected atm")
+	}
+}
+
 // queryActiveSessionIds retrieves the list of connection id of currently connected ws clients
 func queryActiveSessionIds(ctx context.Context) ([]string, error) {
 	expr, err := expression.NewBuilder().
@@ -111,43 +148,6 @@ func sendEventsToWsClients(ctx context.Context, weatherEvents [][]byte, connecti
 		}
 	}
 	waiter.Wait()
-}
-
-func handler(ctx context.Context, event events.DynamoDBEvent) {
-
-	timeBoxedCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	connectionIds, err := queryActiveSessionIds(timeBoxedCtx)
-	if err != nil {
-		log.Fatal("Could not fetch active ws connections from DB", err)
-	}
-
-	if len(connectionIds) > 0 {
-		weatherEvents := [][]byte{}
-		for _, record := range event.Records {
-			cleanEvent := map[string]any{}
-			for k, v := range record.Change.NewImage {
-				if k != "PK" && k != "SK" {
-					if v.DataType() == events.DataTypeString {
-						cleanEvent[k] = v.String()
-					} else if v.DataType() == events.DataTypeNumber {
-						cleanEvent[k] = v.Number()
-					}
-				}
-			}
-			if eventBytes, err := json.Marshal(cleanEvent); err != nil {
-				log.Println("failed to process DynamoDB event", err)
-			} else {
-				weatherEvents = append(weatherEvents, eventBytes)
-			}
-		}
-
-		sendEventsToWsClients(timeBoxedCtx, weatherEvents, connectionIds)
-
-	} else {
-		log.Println("no WS client connected atm")
-	}
 }
 
 func main() {
