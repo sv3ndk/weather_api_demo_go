@@ -1,6 +1,7 @@
 package weather_client
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -23,11 +24,23 @@ type WeatherClient struct {
 	apiKey     string
 }
 
-func New(url, apiKey string) WeatherClient {
+func New(url, apiKey, certFile, keyFile string) WeatherClient {
+
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	return WeatherClient{
-		ApiUrl:     url,
-		httpClient: &http.Client{},
-		apiKey:     apiKey,
+		ApiUrl: url,
+		httpClient: &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					Certificates: []tls.Certificate{cert},
+				},
+			},
+		},
+		apiKey: apiKey,
 	}
 }
 

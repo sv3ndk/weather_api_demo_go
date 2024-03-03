@@ -23,6 +23,11 @@ Parameters:
     Type: String
     Default: arn:aws:acm:eu-central-1:739786912520:certificate/9470cb02-9944-4d59-b3f0-33ef3881997b
 
+  RestApiMtlsTruststore:
+    Description: S3 URL of the trustore used for mTLS 
+    Type: String
+    Default: s3://svend/weather-api-demo/weather-rest-service-truststore.pem
+
 Resources:
 
   # Common public domain name used for both the REST and
@@ -35,11 +40,10 @@ Resources:
     Properties:
       Description: REST API providing read access to weather events
       StageName: !Ref RestStageName
-      DisableExecuteApiEndpoint: True           # disabled to force clients to use the public DNS name
+      DisableExecuteApiEndpoint: True           # disabled to force clients to use the public DNS domain
       ApiKeySourceType: HEADER
       Auth:
         ApiKeyRequired: true    # requiring an API key for all methods
-
 
   # this requires a DNS entry to exist for this domain (see readme, and output variable)
   WeatherReadFrontendDomain:  
@@ -50,6 +54,9 @@ Resources:
         - CertificateArn: !Ref DomainCertificateArn
           EndpointType: Regional
           SecurityPolicy: TLS_1_2
+      MutualTlsAuthentication:
+        TruststoreUri: !Ref RestApiMtlsTruststore   # requiring the client to sign each request
+
 
   # this requires a certificate to exist in ACM (see readme, and input variable)
   WeatherReadFrontendMapping:

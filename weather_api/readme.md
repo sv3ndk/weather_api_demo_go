@@ -12,6 +12,16 @@ Both the REST and Websocek endpoints are associated with a public DNS subdomain 
 
 => use the ARN of that certificate as `DomainCertificateArn` input parameter of the SAM template.
 
+### mutual TLS pre-requisite
+
+The SAM stack activate mutual TLS on the REST API, which requires a trustore to be manually created and uploaded.
+
+* execute [gen-certs.sh](../weather_rest_client/certificates/gen-certs.sh) to create a fake root CA, a client private key 
+  and certificate and a trustore to be used by the REST server
+* upload the trustore to S3
+
+=> use the path of that trustore on S3 as `RestApiMtlsTruststore` input parameter of the SAM template.
+
 ### Stack deployment
 
 Build and deploy the SAM application:
@@ -87,10 +97,12 @@ See the [REST client](../weather_rest_client/readme.md)
 and the [websocket client](../weather_ws_client/readme.md) 
 to query each service.
 
-For the REST service, we can simply use `curl` :
+For the REST service, we can also simply use `curl` :
 
 ```sh
 curl GET \
     'https://rest.weather-api-demo.poc.svend.xyz/weather?device_id=1005&from=2023-02-17T20:13:25%2B0100&to=2025-02-17T20:13:55%2B0100' \
-    -H 'X-API-Key: <api key>'
+    -H 'X-API-Key: <api key>' \
+    --key ../weather_rest_client/certificates/clientKey.pem \
+    --cert ../weather_rest_client/certificates/clientCert.pem
 ```
